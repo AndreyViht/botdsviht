@@ -16,45 +16,50 @@ function sanitizeText(text) {
     .trim();
 }
 
-// canned responses for known names, downloads and model query
+// canned responses for known names and downloads — only when user explicitly asks
 function cannedResponse(prompt) {
   const p = String(prompt || '').trim();
   const low = p.toLowerCase();
 
-  // Андрей / Viht
-  if (/\b(андрей|andrey|andrei|andrey\s+viht|viht|вихт)\b/i.test(p)) {
+  // identity questions only: match "who is" or "who is (female)" patterns in RU/EN
+  const whoRx = /\b(?:кто\s+так[а|ой]|кто\s+такая|who\s+is|who's)\b/i;
+
+  // Андрей / Viht — only respond when user asks who he is
+  if (whoRx.test(p) && /\b(андрей|andrey|viht|вихт)\b/i.test(p)) {
     return `👨‍💻 Андрей Вихт — создатель и главный разработчик системы VPN Viht, основатель компании Viht. Это грамотный и добрый человек, который вложил душу в проект. Подробнее: https://vihtai.pro`;
   }
 
-  // Sandra
-  if (/\b(сандра|sandra|sandra\s+goslin|sandra\s+viht)\b/i.test(p)) {
+  // Sandra — respond only to direct question
+  if (whoRx.test(p) && /\b(сандра|sandra|sandra\s+goslin|sandra\s+viht)\b/i.test(p)) {
     return `💖 Sandra — помощник и самый любимый человек создателя, поддерживающая команду и пользователей. Очень тёплый и заботливый человек. 😊`;
   }
 
-  // Naya / Noy / Naya Bay / Ной Бой
-  if (/\b(naya\s+bay|naya|noya|ной\s*бой|ной|ная|няя)\b/i.test(p)) {
+  // Naya / Noy — direct question only
+  if (whoRx.test(p) && /\b(naya\s+bay|naya|noya|ной\s*бой|ной|ная|няя)\b/i.test(p)) {
     return `🎭 Naya (Naya Bay) — весёлый и душевный человек, который поднимает настроение в команде шутками и поддержкой. Всегда рядом, чтобы помочь и рассмешить.`;
   }
 
-  // model question
-  if (/\b(какая\s+модель|какая\s+модель\s+используется|what\s+model|which\s+model)\b/i.test(low)) {
+  // model question explicit
+  if (/\b(?:какая\s+модель|какая\s+модель\s+используется|what\s+model|which\s+model)\b/i.test(low)) {
     return `Модель: viht-ai-ftxl-v-1-34.`;
   }
 
-  // Downloads queries
-  if (/\b(android|плей\s*маркет|play\s*store|скачать\s+андроид|скачать\s+android)\b/i.test(p)) {
-    return `📲 Для Android: https://play.google.com/store/apps/details?id=com.v2raytun.android&hl=ru — скачайте приложение V2RayTUN из Play Маркета.`;
-  }
-  if (/\b(ios|iphone|ipad|app\s*store|скачать\s+ios|скачать\s+iphone)\b/i.test(p)) {
-    return `📱 Для iOS: https://apps.apple.com/ru/app/v2raytun/id6476628951 — загрузите V2RayTUN из App Store.`;
-  }
-  if (/\b(windows|win|скачать\s+windows|скачать\s+виндовс)\b/i.test(p)) {
-    return `💻 Для Windows: https://v2raytunvpn.cc/files/xraysurf.zip — скачайте клиент для Windows.`;
+  // Downloads — only when user asks about downloading or mentions 'скачать' / 'download'
+  if (/\b(скачать|download|install|установить)\b/i.test(p)) {
+    if (/android|плей\s*маркет|play\s*store/i.test(p)) {
+      return `📲 Для Android: https://play.google.com/store/apps/details?id=com.v2raytun.android&hl=ru`;
+    }
+    if (/ios|iphone|ipad|app\s*store/i.test(p)) {
+      return `📱 Для iOS: https://apps.apple.com/ru/app/v2raytun/id6476628951`;
+    }
+    if (/windows|win|виндовс/i.test(p)) {
+      return `💻 Для Windows: https://v2raytunvpn.cc/files/xraysurf.zip`;
+    }
   }
 
-  // How to create key instruction
+  // How to create key — only when user asks about key creation
   if (/\b(ключ|создать\s+ключ|create\s+key|auth|авторизоваться|авторизация)\b/i.test(p)) {
-    return `🔑 Чтобы получить ключ: зайдите на https://vihtai.pro, авторизуйтесь через Telegram, выберите подходящее устройство и создайте ключ доступа.`;
+    return `🔑 Чтобы получить ключ: зайди на https://vihtai.pro, авторизуйся через Telegram, выбери устройство и создай ключ доступа.`;
   }
 
   return null;

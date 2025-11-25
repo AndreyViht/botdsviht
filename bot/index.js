@@ -219,9 +219,12 @@ client.once('ready', async () => {
   console.log(`Ready as ${client.user.tag}`);
   console.log('Config flags:', { messageContentIntent, guildMembersIntent });
 
+  // Wait a bit for DB to initialize
+  await new Promise(r => setTimeout(r, 1000));
+
   // Post rules once
   try {
-    const RULES_CHANNEL_ID = '1436487842334507058'; const rulesRec = db.get && db.get('rulesPosted') ? db.get('rulesPosted') : null;
+    const RULES_CHANNEL_ID = '1436487842334507058'; const rulesRec = db.get ? db.get('rulesPosted') : null;
     if (!rulesRec) {
       const channel = await client.channels.fetch(RULES_CHANNEL_ID).catch(() => null);
       if (channel) {
@@ -237,7 +240,7 @@ client.once('ready', async () => {
   // Post or update support panel
   try {
     const SUPPORT_CHANNEL_ID = '1442575929044897792';
-    const panelRec = db.get && db.get('supportPanelPosted') ? db.get('supportPanelPosted') : null;
+    const panelRec = db.get ? db.get('supportPanelPosted') : null;
     const supportChannel = await client.channels.fetch(SUPPORT_CHANNEL_ID).catch(() => null);
     if (!supportChannel) return console.warn('Support channel not found:', SUPPORT_CHANNEL_ID);
     const embed = new EmbedBuilder().setTitle('🛠️ Служба поддержки Viht').setColor(0x0066cc).setDescription('Нажмите кнопку ниже, чтобы создать новое обращение в службу поддержки. Пожалуйста, указывайте тему и подробности — это поможет нам быстрее решить вашу проблему.');

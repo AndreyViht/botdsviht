@@ -4,7 +4,7 @@ const { useMockAi } = require('../config');
 const db = require('../libs/db');
 
 function vihtError() {
-  return 'ОШИБКА ПОДКЛЮЧЕНИЯ К СЕРВЕРАМ Viht. Мы уже передали разработчикам — подождите немного, пожалуйста.';
+  return 'В данный момент сервис перегружен. Пожалуйста, попробуйте позже.';
 }
 
 function sanitizeText(text) {
@@ -13,6 +13,12 @@ function sanitizeText(text) {
     .replace(/([\p{L}\p{N}])\s*\n\s*([\p{L}\p{N}])/gu, '$1 $2')
     .replace(/ {2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
+    // Convert markdown links [text](url) -> url
+    .replace(/\[[^\]]+\]\((https?:\/\/[^)]+)\)/g, '$1')
+    // Remove leftover square brackets like [text]
+    .replace(/\[([^\]]+)\]/g, '$1')
+    // Remove backticks
+    .replace(/`/g, '')
     .trim();
 }
 
@@ -31,7 +37,7 @@ function cannedResponse(prompt) {
 
   // Sandra — respond only to direct question
   if (whoRx.test(p) && /\b(сандра|sandra|sandra\s+goslin|sandra\s+viht)\b/i.test(p)) {
-    return `💖 Sandra — помощник и самый любимый человек создателя, поддерживающая команду и пользователей. Очень тёплый и заботливый человек. 😊`;
+    return `💖 Sandra — помощник и близкий человек создателя проекта. В контексте проекта Viht у меня нет публичных подробных данных о ней.`;
   }
 
   // Naya / Noy — direct question only
@@ -45,21 +51,19 @@ function cannedResponse(prompt) {
   }
 
   // Downloads — only when user asks about downloading or mentions 'скачать' / 'download'
-  if (/\b(скачать|download|install|установить)\b/i.test(p)) {
-    if (/android|плей\s*маркет|play\s*store/i.test(p)) {
-      return `📲 Для Android: https://play.google.com/store/apps/details?id=com.v2raytun.android&hl=ru`;
-    }
-    if (/ios|iphone|ipad|app\s*store/i.test(p)) {
-      return `📱 Для iOS: https://apps.apple.com/ru/app/v2raytun/id6476628951`;
-    }
-    if (/windows|win|виндовс/i.test(p)) {
-      return `💻 Для Windows: https://v2raytunvpn.cc/files/xraysurf.zip`;
-    }
+  if (/\b(скачать|download|install|установить|где\s+скачать|ссылка|сайт)\b/i.test(p)) {
+    // Provide official downloads page as primary link (covers OS-specific queries too)
+    return `Скачать приложения и клиенты: https://vihtai.pro/downloads`;
   }
 
   // How to create key — only when user asks about key creation
   if (/\b(ключ|создать\s+ключ|create\s+key|auth|авторизоваться|авторизация)\b/i.test(p)) {
-    return `🔑 Чтобы получить ключ: зайди на https://vihtai.pro, авторизуйся через Telegram, выбери устройство и создай ключ доступа.`;
+    return `🔑 Чтобы получить ключ: перейди на https://vihtai.pro, авторизуйся через Telegram и создай ключ для вашего устройства (раздел "Ключи" или "Downloads").`;
+  }
+
+  // Nickname / playful requests — handle explicitly requested nicknames (e.g., "называй меня папочкой")
+  if (/\b(называй меня|назови меня|зов(и|ь) меня)\b.*\b(папочк|папочка|папуля|пап)\b/i.test(p)) {
+    return `Хорошо — буду называть тебя папочкой, если тебе так нравится. 😉`;
   }
 
   return null;

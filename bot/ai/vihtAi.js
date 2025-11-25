@@ -21,8 +21,8 @@ function cannedResponse(prompt) {
   const p = String(prompt || '').trim();
   const low = p.toLowerCase();
 
-  // identity questions only: match "who is" or "who is (female)" patterns in RU/EN
-  const whoRx = /\b(?:кто\s+так[а|ой]|кто\s+такая|who\s+is|who's)\b/i;
+  // identity questions only: match "кто такой/кто такая" or English "who is/who's"
+  const whoRx = /\b(?:кто\s+(?:такой|такая)|who\s+is|who(?:'|’)s)\b/i;
 
   // Андрей / Viht — only respond when user asks who he is
   if (whoRx.test(p) && /\b(андрей|andrey|viht|вихт)\b/i.test(p)) {

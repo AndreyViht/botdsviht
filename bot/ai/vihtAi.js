@@ -26,21 +26,24 @@ function cannedResponse(prompt) {
   const p = String(prompt || '').trim();
   const low = p.toLowerCase();
 
-  // Match "кто такой/такая" or "who is"
-  const whoRx = /\b(?:кто\s+(?:такой|такая)|who\s+is|who(?:'|')s)\b/i;
+  // Match "кто" queries (Unicode-aware). Use lookarounds to support Cyrillic.
+  const whoRx = /(?<!\p{L})(?:кто\s+(?:такой|такая)|who\s+is|who(?:'|’)s)(?!\p{L})/iu;
+  const nameAndreyRx = /(?<!\p{L})(?:андрей|вихт|andrey|viht)(?!\p{L})/iu;
+  const nameSandraRx = /(?<!\p{L})(?:сандра|sandra|sandra\s+goslin|sandra\s+viht)(?!\p{L})/iu;
+  const nameNayaRx = /(?<!\p{L})(?:naya\s+bay|naya|noya|ней\s+бей|ной\s+бой|ная)(?!\p{L})/iu;
 
   // ANDREY / VIHT - only if user explicitly asks "who is"
-  if (whoRx.test(p) && /\b(андрей|вихт|andrey|viht)\b/i.test(p)) {
+  if (whoRx.test(p) && nameAndreyRx.test(p)) {
     return `👨‍💻 **Андрей Вихт** — создатель и главный разработчик системы VPN Viht, основатель компании Viht. Это грамотный, умный и очень хороший человек, который вложил всю душу в развитие проекта. Узнать больше: https://vihtai.pro`;
   }
 
   // SANDRA - only if user explicitly asks "who is"
-  if (whoRx.test(p) && /\b(сандра|sandra|sandra\s+goslin|sandra\s+viht)\b/i.test(p)) {
+  if (whoRx.test(p) && nameSandraRx.test(p)) {
     return `💖 **Sandra** — помощник и самый любимый человек создателя Andrey Viht. Она поддерживает команду и пользователей, очень тёплый, заботливый и вдохновляющий человек. ✨`;
   }
 
   // NAYA - only if user explicitly asks "who is"
-  if (whoRx.test(p) && /\b(naya\s+bay|naya|noya|ней\s+бей|ной\s+бой|ная)\b/i.test(p)) {
+  if (whoRx.test(p) && nameNayaRx.test(p)) {
     return `🎭 **Naya (Naya Bay)** — прекрасный человек, который является сердцем команды. Всегда смешит, веселит и поддерживает коллектив. Несёт за собой юмор, позитив и стремление помогать. Настоящая звёзда в команде! ⭐`;
   }
 
@@ -49,9 +52,8 @@ function cannedResponse(prompt) {
     return `Модель: viht-ai-ftxl-v-1-34`;
   }
 
-  // DOWNLOADS - only if explicitly asked "скачать" / "download" / "ссылка" / "где скачать"
-  if (/\b(скачать|download|install|установить|ссылка|где|как|загрузить|получить)\b.*\b(скачать|download|приложение|app|android|ios|windows|виндовс|платформа)\b/i.test(p) || /\b(скачать|download|install|установить|ссылка)\b/i.test(p)) {
-    // Universal downloads page for all platforms
+  // DOWNLOADS - match a wide range of download requests (Unicode-friendly)
+  if (/(?:скач|download|install|установ|загруз|ссылка|где|как|получить)/iu.test(p) && /(?:приложен|app|android|ios|windows|виндовс|скач)/iu.test(p)) {
     return `🔗 **Скачать приложение:**\nhttps://vihtai.pro/downloads\n\nВыбери свою платформу (Android, iOS или Windows), скачай приложение, затем перейди на https://vihtai.pro, авторизуйся через Telegram и создай ключ для вашего устройства.`;
   }
 

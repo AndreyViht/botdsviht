@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Viht Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="header">
+    <div class="container">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <h2 class="h1">Viht Dashboard</h2>
+          <div class="small">Управляйте ботом: настройки, приветствие, кастомные команды</div>
+        </div>
+        <div>
+          <input id="token" placeholder="DASH_TOKEN" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit" />
+          <button id="auth" class="btn">Войти</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div id="main" style="display:none">
+      <div class="grid">
+        <div>
+          <div class="card">
+            <h3>Настройки бота</h3>
+            <div class="label">Welcome channel ID</div>
+            <input id="welcomeChannel" class="input" />
+            <div class="label">Announce channel ID</div>
+            <input id="announceChannel" class="input" />
+            <div class="label">AI chat channel ID</div>
+            <input id="aiChannel" class="input" />
+            <div class="label">Subscriber role ID</div>
+            <input id="subscriberRole" class="input" />
+            <p style="margin-top:12px"><button id="saveSettings" class="btn">Сохранить</button> <button id="sendWelcome" class="btn">Отправить приветствие</button></p>
+            <p id="saveStatus" class="small"></p>
+          </div>
+
+          <div class="card">
+            <h3>Кастомные команды</h3>
+            <div class="notice">Здесь вы можете добавлять простые текстовые команды, которые бот будет отправлять как ответ.</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <input id="cmdName" class="input" placeholder="Имя команды (пример: hello)" />
+              <input id="cmdDesc" class="input" placeholder="Краткое описание" />
+            </div>
+            <textarea id="cmdResp" class="input" placeholder="Текст ответа, который отправит бот" rows="3"></textarea>
+            <p style="margin-top:8px"><button id="addCmd" class="btn">Добавить / Обновить</button></p>
+            <div class="commands-list" id="commandsList"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <h3>Статистика</h3>
+            <pre id="statsArea" class="small">Загрузка...</pre>
+          </div>
+
+          <div class="card">
+            <h3>DB (admin)</h3>
+            <pre id="dbArea" class="small">Загрузка...</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">Viht Dashboard — простая панель для управления ботом</div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "viht-vpn-bot",
+  "version": "0.1.0",
+  "description": "Discord bot Viht VPN — AI chat + reaction role + dashboard",
+  "main": "bot/index.js",
+  "scripts": {
+    "start": "node bot/index.js",
+    "start:dev": "nodemon bot/index.js",
+    "register-commands": "node bot/commands/register-commands.js",
+    "dashboard": "node dashboard/app.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@discordjs/rest": "^1.0.1",
+    "axios": "^1.0.0",
+    "discord-api-types": "^0.37.40",
+    "discord.js": "^14.0.3",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.2",
+    "lowdb": "^3.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}

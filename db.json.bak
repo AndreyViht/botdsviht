@@ -1,0 +1,88 @@
+{
+  "welcome": {
+    "channelId": "1436487788760535143",
+    "messageId": "1441863997220589650"
+  },
+  "stats": {
+    "aiRequests": 146
+  },
+  "anonLogs": [
+    {
+      "timestamp": "2025-11-22T21:39:36.413Z",
+      "fromId": "927696065476567090",
+      "fromTag": "a.viht#0",
+      "toId": "1314301660654338128",
+      "toTag": "naya_bay#0",
+      "content": "Ты кто",
+      "delivered": true
+    },
+    {
+      "timestamp": "2025-11-22T21:40:07.791Z",
+      "fromId": "927696065476567090",
+      "fromTag": "a.viht#0",
+      "toId": "927696065476567090",
+      "toTag": "a.viht#0",
+      "content": "logs",
+      "delivered": true
+    }
+  ],
+  "aiPersona": {
+    "tone": "aggressive",
+    "verbosity": "brief"
+  },
+  "rulesPosted": {
+    "channelId": "1436487842334507058",
+    "postedAt": 1764006274682
+  },
+  "testVpnIp": "194.113.153.95",
+  "supportPanelPosted": {
+    "channelId": "1442575929044897792",
+    "messageId": "1442577773540675629",
+    "postedAt": 1764007743126
+  },
+  "tickets": [
+    {
+      "id": "t_1764007768484",
+      "threadId": "1442577879904026626",
+      "channelId": "1442575929044897792",
+      "creatorId": "927696065476567090",
+      "subject": "ПРОБЛЕМА С ПОДКЛЮЧЕНИЕМ",
+      "message": "Привет тестовое сообщение",
+      "status": "open",
+      "createdAt": "2025-11-24T18:09:28.484Z"
+    },
+    {
+      "id": "t_1764008092643",
+      "threadId": "1442579233468579993",
+      "channelId": "1442575929044897792",
+      "creatorId": "927696065476567090",
+      "subject": "Привет",
+      "message": "123",
+      "status": "closed",
+      "createdAt": "2025-11-24T18:14:52.643Z",
+      "closedAt": "2025-11-24T18:55:48.102Z"
+    },
+    {
+      "id": "t_1764008173916",
+      "threadId": "1442579572984909982",
+      "channelId": "1442575929044897792",
+      "creatorId": "1314326276474933368",
+      "subject": "Ты меня не любишь",
+      "message": "Меня нужно любить, кормить и не кому не отдавать",
+      "status": "closed",
+      "createdAt": "2025-11-24T18:16:13.916Z",
+      "closedAt": "2025-11-24T18:53:53.429Z"
+    },
+    {
+      "id": "t_1764008190467",
+      "threadId": "1442579642601963682",
+      "channelId": "1442575929044897792",
+      "creatorId": "1314301660654338128",
+      "subject": "Очка",
+      "message": "Ля ля ядя ля ядялял",
+      "status": "closed",
+      "createdAt": "2025-11-24T18:16:30.467Z",
+      "closedAt": "2025-11-24T18:55:35.200Z"
+    }
+  ]
+}

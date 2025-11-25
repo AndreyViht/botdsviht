@@ -298,4 +298,13 @@ client.once('ready', async () => {
   } catch (e) { console.warn('Failed to post support panel on ready:', e && e.message ? e.message : e); }
 });
 
+// Global safety handlers to avoid process crash on uncaught errors
+process.on('unhandledRejection', (reason, p) => {
+  try { console.error('Unhandled Rejection at:', p, 'reason:', reason); } catch (e) { console.error('Unhandled Rejection', reason); }
+});
+process.on('uncaughtException', (err) => {
+  try { console.error('Uncaught Exception:', err && err.stack ? err.stack : err); } catch (e) { console.error('Uncaught Exception', err); }
+  // do not exit — keep process alive; consider reporting/alerting
+});
+
 client.login(token);

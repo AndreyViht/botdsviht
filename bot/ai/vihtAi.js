@@ -79,30 +79,49 @@ async function sendPrompt(prompt, opts = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return vihtError();
 
-  try {
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        contents: [{ role: 'user', parts: [{ text: String(prompt) }] }],
-        systemInstruction: {
-          parts: [{ text: `Ты — Viht, виртуальный помощник проекта Viht. Отвечай по-русски, дружелюбно и по делу. Помогай с подключением к VPN Viht, давай инструкции по скачиванию приложений (Android, iOS, Windows), подсказывай как создать ключ на https://vihtai.pro (авторизация через Telegram). Помогаешь также с кодингом, разбором и идеями. Не упоминай внутреннее имя модели в каждом ответе — только если прямо спросят "какая модель". Используй эмодзи, делай ответ понятным и коротким.` }] },
-        generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
-      },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 60000 }
-    );
+  // call with retries for transient errors (503, 5xx, network)
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const payload = {
+    contents: [{ role: 'user', parts: [{ text: String(prompt) }] }],
+    systemInstruction: {
+      parts: [{ text: `Ты — Viht, виртуальный помощник проекта Viht. Отвечай по-русски, дружелюбно и по делу. Помогай с подключением к VPN Viht, давай инструкции по скачиванию приложений (Android, iOS, Windows), подсказывай как создать ключ на https://vihtai.pro (авторизация через Telegram). Помогаешь также с кодингом, разбором и идеями. Не упоминай внутреннее имя модели в каждом ответе — только если прямо спросят "какая модель". Используй эмодзи, делай ответ понятным и коротким.` }] },
+    generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
+  };
 
-    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      let out = sanitizeText(response.data.candidates[0].content.parts[0].text);
-      if (out.length > 1800) out = out.slice(0, 1800).trim();
-      try { if (db && db.incrementAi) db.incrementAi(); } catch (e) {}
-      return out;
+  const maxAttempts = 4;
+  let attempt = 0;
+  let lastErr = null;
+
+  while (attempt < maxAttempts) {
+    attempt += 1;
+    try {
+      const response = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' }, timeout: 60000 });
+      if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        let out = sanitizeText(response.data.candidates[0].content.parts[0].text);
+        if (out.length > 1800) out = out.slice(0, 1800).trim();
+        try { if (db && db.incrementAi) db.incrementAi(); } catch (e) { console.warn('incrementAi failed:', e && e.message); }
+        return out;
+      }
+      // unexpected empty response — break
+      return vihtError();
+    } catch (e) {
+      lastErr = e;
+      const status = e?.response?.status;
+      console.warn(`AI request attempt ${attempt} failed`, status || e.code || e.message);
+      // retry on 5xx or network errors
+      if (status && status >= 500 && status < 600 || !status) {
+        if (attempt < maxAttempts) {
+          const delay = Math.pow(2, attempt) * 500; // 1s, 2s, 4s, ...
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+      }
+      break;
     }
-
-    return vihtError();
-  } catch (e) {
-    console.error('❌ AI ошибка:', e && e.message ? e.message : e);
-    return vihtError();
   }
+
+  console.error('❌ AI ошибка: all attempts failed', lastErr && (lastErr.message || lastErr));
+  return vihtError();
 }
 
 module.exports = { sendPrompt };

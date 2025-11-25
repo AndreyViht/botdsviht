@@ -10,7 +10,7 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 5  # Terminate job after 5 minutes
+    timeout-minutes: 60  # Terminate job after 60 minutes (increase while we evaluate hosting)
     
     steps:
     - uses: actions/checkout@v3

@@ -1,31 +1,37 @@
-const { Low, JSONFile } = require('lowdb');
 const path = require('path');
-const dbFile = path.join(__dirname, '..', '..', 'db.json');
+let db = null;
 
-const adapter = new JSONFile(dbFile);
-const db = new Low(adapter);
-
-// initialize default structure
-(async () => {
+// Initialize lowdb async
+async function initDb() {
+  if (db) return db;
+  const { Low, JSONFile } = await import('lowdb');
+  const dbFile = path.join(__dirname, '..', '..', 'db.json');
+  const adapter = new JSONFile(dbFile);
+  db = new Low(adapter);
   await db.read();
   db.data = db.data || { welcome: null, stats: { aiRequests: 0 } };
   await db.write();
-})();
+  return db;
+}
 
-const wrapper = {
-  get: (k) => db.data[k],
-  set: (k, v) => { db.data[k] = v; return db.write(); },
-  incrementAi: async () => { db.data.stats.aiRequests = (db.data.stats.aiRequests || 0) + 1; await db.write(); },
-  getAll: () => db.data,
-  // lowdb chain-like helper
-  get: function(key) { return { value: db.data[key], write: async () => await db.write() }; }
-};
+// Initialize on module load
+let dbReady = initDb().catch(e => console.error('DB init error:', e));
 
 module.exports = {
-  // small convenience wrapper for above
-  set: async (k, v) => { db.data[k] = v; try { await db.write(); } catch (e) { if (e.code !== 'EPERM') throw e; console.warn('DB write warning (EPERM):', e.message); } return db.data[k]; },
-  get: (k) => db.data && db.data[k],
+  set: async (k, v) => { 
+    await dbReady;
+    db.data[k] = v; 
+    try { 
+      await db.write(); 
+    } catch (e) { 
+      if (e.code !== 'EPERM') throw e; 
+      console.warn('DB write warning (EPERM):', e.message); 
+    } 
+    return db.data[k]; 
+  },
+  get: (k) => db && db.data ? db.data[k] : null,
   incrementAi: async () => { 
+    await dbReady;
     try {
       db.data.stats.aiRequests = (db.data.stats.aiRequests || 0) + 1; 
       await db.write(); 
@@ -37,5 +43,5 @@ module.exports = {
       }
     }
   },
-  all: () => db.data
+  all: () => db && db.data ? db.data : null
 };

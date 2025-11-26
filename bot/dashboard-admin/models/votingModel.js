@@ -3,19 +3,19 @@ const db = require('../../libs/db');
 
 const VOTING_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 
-async function startPresidentVoting(guild, initiatorId) {
+async function startPresidentVoting(guild, initiatorId, candidates) {
   try {
     const votingData = {
       type: 'president',
       startedAt: Date.now(),
       endsAt: Date.now() + VOTING_DURATION_MS,
       initiatorId,
-      votes: {}, // { userId: true/false for each candidate }
-      candidates: [],
+      candidates: candidates || [], // Store candidates array
+      votes: {}, // { userId: candidateId }
       active: true
     };
     if (db && db.set) await db.set('voting', votingData);
-    console.log('[Voting] President voting started');
+    console.log('[Voting] President voting started with', candidates?.length || 0, 'candidates');
     return votingData;
   } catch (e) {
     console.error('startPresidentVoting error:', e.message);
@@ -58,11 +58,50 @@ function getVotingRemainingSeconds() {
   return Math.max(0, Math.ceil(remaining / 1000));
 }
 
+async function recordVote(userId, candidateId) {
+  try {
+    const voting = db.get('voting');
+    if (!voting) return false;
+    if (!voting.votes) voting.votes = {};
+    voting.votes[userId] = candidateId;
+    if (db && db.set) await db.set('voting', voting);
+    return true;
+  } catch (e) {
+    console.error('recordVote error:', e.message);
+    return false;
+  }
+}
+
+async function getVotingResults() {
+  try {
+    const voting = db.get('voting');
+    if (!voting) return null;
+    
+    const results = {};
+    for (const [voterId, candidateId] of Object.entries(voting.votes || {})) {
+      if (!results[candidateId]) results[candidateId] = 0;
+      results[candidateId]++;
+    }
+    
+    return {
+      candidates: voting.candidates || [],
+      votes: voting.votes || {},
+      results,
+      totalVotes: Object.keys(voting.votes || {}).length
+    };
+  } catch (e) {
+    console.error('getVotingResults error:', e.message);
+    return null;
+  }
+}
+
 module.exports = {
   startPresidentVoting,
   getActiveVoting,
   endVoting,
   isVotingExpired,
   getVotingRemainingSeconds,
+  recordVote,
+  getVotingResults,
   VOTING_DURATION_MS
 };

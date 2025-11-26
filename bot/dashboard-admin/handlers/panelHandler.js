@@ -117,13 +117,15 @@ async function handlePanelButton(interaction) {
       // Remove president role from everyone
       await presidentModel.removePresidentRole(guild);
 
-      // Start voting
-      const candidates = await guild.members.fetch().catch(() => null);
-      const validCandidates = candidates ? Array.from(candidates.values()).filter(m => 
+      // Get valid candidates
+      const candidatesCollection = await guild.members.fetch().catch(() => null);
+      const validCandidates = candidatesCollection ? Array.from(candidatesCollection.values()).filter(m => 
         presidentModel.VALID_VOTER_ROLES.some(r => m.roles.cache.has(r)) && !m.user.bot
       ) : [];
 
-      await votingModel.startPresidentVoting(guild, user.id);
+      // Start voting with candidates
+      const candidateData = validCandidates.map(m => ({ id: m.id, username: m.user.username, tag: m.user.tag }));
+      await votingModel.startPresidentVoting(guild, user.id, candidateData);
       
       const embed = new EmbedBuilder()
         .setTitle('🗳️ Голосование за нового Президента')
@@ -203,10 +205,8 @@ async function handlePanelButton(interaction) {
         return;
       }
 
-      const candidates = await guild.members.fetch().catch(() => null);
-      const validCandidates = candidates ? Array.from(candidates.values()).filter(m => 
-        presidentModel.VALID_VOTER_ROLES.some(r => m.roles.cache.has(r)) && !m.user.bot
-      ) : [];
+      // Get candidates from voting data
+      const validCandidates = voting.candidates || [];
 
       if (validCandidates.length === 0) {
         await interaction.followUp({ content: '❌ Нет кандидатов для голосования', ephemeral: true }).catch(() => null);
@@ -220,7 +220,7 @@ async function handlePanelButton(interaction) {
         const row = new ActionRowBuilder().addComponents(
           ...chunk.map((c, idx) => new ButtonBuilder()
             .setCustomId(`vote_${c.id}`)
-            .setLabel(c.user.username.slice(0, 20))
+            .setLabel(c.username.slice(0, 20))
             .setStyle(ButtonStyle.Secondary)
           )
         );
@@ -246,12 +246,17 @@ async function handlePanelButton(interaction) {
         return;
       }
 
-      // Record vote
-      if (!voting.votes) voting.votes = {};
-      voting.votes[user.id] = candidateId;
-      if (db && db.set) await db.set('voting', voting);
+      // Record vote using votingModel
+      const voted = await votingModel.recordVote(user.id, candidateId);
+      
+      if (!voted) {
+        await interaction.followUp({ content: '❌ Не удалось записать голос', ephemeral: true }).catch(() => null);
+        return;
+      }
 
-      await interaction.followUp({ content: `✅ Ваш голос за <@${candidateId}> учтён!`, ephemeral: true }).catch(() => null);
+      const candidate = voting.candidates?.find(c => c.id === candidateId);
+      const candidateName = candidate?.username || 'неизвестный';
+      await interaction.followUp({ content: `✅ Ваш голос за **${candidateName}** учтён!`, ephemeral: true }).catch(() => null);
     }
   } catch (e) {
     console.error('handlePanelButton error:', e.message);

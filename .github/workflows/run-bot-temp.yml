@@ -1,0 +1,43 @@
+name: Run bot temporarily
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  run-bot:
+    name: Run bot (temporary)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run bot for 1 hour
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANNOUNCE_CHANNEL_ID: ${{ secrets.ANNOUNCE_CHANNEL_ID }}
+          MUSIC_LOG_CHANNEL_ID: ${{ secrets.MUSIC_LOG_CHANNEL_ID }}
+        run: |
+          echo "Starting bot in background and keeping runner alive for 1 hour"
+          nohup node bot/index.js > bot.log 2>&1 &
+          BOT_PID=$!
+          echo "Bot PID: $BOT_PID"
+          # Keep the job alive for 1 hour (3600s) - adjust if needed
+          sleep 3600
+          echo "Stopping bot (after 1 hour)"
+          if ps -p $BOT_PID > /dev/null; then
+            kill $BOT_PID || true
+          else
+            pkill -f "node bot/index.js" || true
+          fi
+          echo "Bot stopped"

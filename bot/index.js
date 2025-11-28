@@ -6,7 +6,13 @@ const { token } = require('./config');
 if (!token) console.warn('DISCORD_TOKEN not set in env — set it in .env before starting the bot');
 
 // Intents
-const intentsList = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMessageReactions];
+// Include GuildVoiceStates so the bot can read which voice channel a member is in
+const intentsList = [
+  GatewayIntentBits.Guilds,
+  GatewayIntentBits.GuildMessages,
+  GatewayIntentBits.GuildMessageReactions,
+  GatewayIntentBits.GuildVoiceStates,
+];
 const { messageContentIntent, guildMembersIntent } = require('./config');
 if (messageContentIntent) intentsList.push(GatewayIntentBits.MessageContent);
 if (guildMembersIntent) intentsList.push(GatewayIntentBits.GuildMembers);

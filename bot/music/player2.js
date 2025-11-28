@@ -50,9 +50,22 @@ async function saveQueueForGuild(guildId) {
 async function findYouTubeUrl(query) {
   if (!query) return null;
   if (/^https?:\/\//i.test(query)) return query;
-  const r = await yts(query);
-  const vid = r && r.videos && r.videos.length ? r.videos[0] : null;
-  return vid ? vid.url : null;
+  try {
+    // Try direct search
+    let r = await yts(query);
+    let vid = r && r.videos && r.videos.length ? r.videos.find(v => !v.live && v.seconds > 0) : null;
+    // Try adding 'audio' keyword if nothing found
+    if (!vid) {
+      r = await yts(`${query} audio`);
+      vid = r && r.videos && r.videos.length ? r.videos.find(v => !v.live && v.seconds > 0) : null;
+    }
+    // Fallback to first video if still nothing
+    if (!vid && r && r.videos && r.videos.length) vid = r.videos[0];
+    return vid ? vid.url : null;
+  } catch (e) {
+    console.warn('findYouTubeUrl failed', e && e.message);
+    return null;
+  }
 }
 
 function isYouTubeUrl(url) {
@@ -84,8 +97,20 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
 
     let resource = null;
     if (isYouTubeUrl(url)) {
-      const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 });
-      resource = createAudioResource(stream, { inlineVolume: true });
+      try {
+        // try high quality first, fallback to lower quality if it fails
+        let stream = null;
+        try { stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
+        if (!stream) {
+          try { stream = ytdl(url, { filter: 'audioonly', quality: 'lowestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
+        }
+        if (!stream) throw new Error('ytdl failed to create stream');
+        resource = createAudioResource(stream, { inlineVolume: true });
+      } catch (e) {
+        console.error('ytdl stream error', e && e.message);
+        if (textChannel && textChannel.send) await textChannel.send('❌ Ошибка при получении аудиопотока с YouTube. Попробуйте другой запрос или ссылку.');
+        return false;
+      }
     } else {
       const stream = await streamFromUrl(url);
       if (!stream) { if (textChannel && textChannel.send) await textChannel.send('❌ Не удалось открыть поток.'); return false; }

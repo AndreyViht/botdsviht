@@ -1,6 +1,8 @@
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, NoSubscriberBehavior, AudioPlayerStatus, getVoiceConnection } = require('@discordjs/voice');
 const ytdl = require('ytdl-core');
 const yts = require('yt-search');
+let playdl = null;
+try { playdl = require('play-dl'); } catch (e) { playdl = null; }
 const db = require('../libs/db');
 
 // single in-memory state map
@@ -128,7 +130,23 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
           }
         }
         if (!resource) {
-          throw lastErr || new Error('No ytdl candidate succeeded');
+          // try play-dl fallback if available
+          if (playdl) {
+            for (const c of attempted) {
+              try {
+                const pl = await playdl.stream(c).catch(() => null);
+                if (pl && pl.stream) {
+                  resource = createAudioResource(pl.stream, { inlineVolume: true });
+                  url = c;
+                  break;
+                }
+              } catch (ee) {
+                console.warn('play-dl candidate failed', c, ee && ee.message);
+                continue;
+              }
+            }
+          }
+          if (!resource) throw lastErr || new Error('No ytdl candidate succeeded');
         }
       } catch (e) {
         console.error('ytdl stream error', e && e.stack ? e.stack : e && e.message ? e.message : e);

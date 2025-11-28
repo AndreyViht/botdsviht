@@ -3,6 +3,7 @@ const ytdl = require('ytdl-core');
 const yts = require('yt-search');
 let playdl = null;
 try { playdl = require('play-dl'); } catch (e) { playdl = null; }
+const { exec } = require('child_process');
 const db = require('../libs/db');
 
 // single in-memory state map
@@ -142,6 +143,33 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
                 }
               } catch (ee) {
                 console.warn('play-dl candidate failed', c, ee && ee.message);
+                continue;
+              }
+            }
+          }
+          // If still no resource, try yt-dlp via npx to get direct audio URL
+          if (!resource) {
+            for (const c of attempted) {
+              try {
+                const candidate = c;
+                const cmd = `npx -y yt-dlp -f bestaudio -g ${JSON.stringify(candidate)}`;
+                const direct = await new Promise((resolve, reject) => {
+                  exec(cmd, { timeout: 20000, windowsHide: true }, (err, stdout, stderr) => {
+                    if (err) return reject(err);
+                    const out = (stdout || '').trim().split(/\r?\n/)[0];
+                    resolve(out || null);
+                  });
+                }).catch(e => null);
+                if (direct) {
+                  const s = await streamFromUrl(direct);
+                  if (s) {
+                    resource = createAudioResource(s, { inlineVolume: true });
+                    url = candidate;
+                    break;
+                  }
+                }
+              } catch (ee) {
+                console.warn('yt-dlp candidate failed', c, ee && ee.message);
                 continue;
               }
             }

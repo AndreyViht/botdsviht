@@ -107,7 +107,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.isButton()) {
       // Dashboard-admin panel buttons
-      if (handlePanelButton && (interaction.customId.includes('cabinet') || interaction.customId.includes('government') || interaction.customId.includes('shop') || interaction.customId.includes('back_') || interaction.customId.includes('gov_') || interaction.customId.includes('vote') || interaction.customId.includes('music') || interaction.customId.startsWith('radio_'))) {
+      if (handlePanelButton && (interaction.customId.includes('cabinet') || interaction.customId.includes('government') || interaction.customId.includes('shop') || interaction.customId.includes('back_') || interaction.customId.includes('gov_') || interaction.customId.includes('vote') || interaction.customId.includes('music'))) {
         try { await handlePanelButton(interaction); } catch (err) { console.error('Panel button error', err); await safeReply(interaction, { content: 'Ошибка при обработке кнопки.', ephemeral: true }); }
         return;
       }

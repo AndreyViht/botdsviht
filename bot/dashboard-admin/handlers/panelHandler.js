@@ -6,7 +6,6 @@ const votingModel = require('../models/votingModel');
 const userCabinetEmbeds = require('../embeds/userCabinet');
 const governmentEmbeds = require('../embeds/government');
 const musicPlayer = require('../../music/player2');
-const radiosList = require('../../music/radios.json');
 
 const PANEL_CHANNEL_ID = '1443194196172476636';
 
@@ -236,14 +235,13 @@ async function handlePanelButton(interaction) {
       const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('music_vol_up').setLabel('🔊 Громче').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('music_vol_down').setLabel('🔉 Тише').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('music_queue_add').setLabel('➕ В очередь').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('music_radio').setLabel('📻 Радио').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('music_queue_add').setLabel('➕ В очередь').setStyle(ButtonStyle.Primary)
       );
       await interaction.reply({ embeds: [embed], components: [row1, row2], ephemeral: true }).catch(() => null);
       return;
     }
 
-    if (customId === 'music_stop' || customId === 'music_next' || customId === 'music_vol_up' || customId === 'music_vol_down' || customId === 'music_queue_add' || customId === 'music_radio' || customId === 'music_back') {
+    if (customId === 'music_stop' || customId === 'music_next' || customId === 'music_vol_up' || customId === 'music_vol_down' || customId === 'music_queue_add' || customId === 'music_back') {
       // handle in follow-up style
       if (customId === 'music_stop') {
         const ok = await musicPlayer.stop(guild);
@@ -271,16 +269,6 @@ async function handlePanelButton(interaction) {
         const input = new TextInputBuilder().setCustomId('music_query').setLabel('Ссылка или название').setStyle(TextInputStyle.Short).setRequired(true);
         modal.addComponents(new ActionRowBuilder().addComponents(input));
         try { await interaction.showModal(modal); } catch (e) { await interaction.followUp({ content: 'Не удалось открыть форму.', ephemeral: true }).catch(() => null); }
-        return;
-      }
-      if (customId === 'music_radio') {
-        // present radio options from radios.json
-        const rows = [];
-        for (let i = 0; i < radiosList.length; i += 5) {
-          const chunk = radiosList.slice(i, i + 5);
-          rows.push(new ActionRowBuilder().addComponents(...chunk.map(r => new ButtonBuilder().setCustomId(`radio_${r.id}`).setLabel(r.label).setStyle(ButtonStyle.Secondary))));
-        }
-        await interaction.reply({ content: 'Выберите радиостанцию', components: rows, ephemeral: true }).catch(() => null);
         return;
       }
       if (customId === 'music_back') {
@@ -337,27 +325,7 @@ async function handlePanelButton(interaction) {
       await interaction.followUp({ embeds: [embed], components: rows, ephemeral: true }).catch(() => null);
     }
 
-    // Radio button pressed -> start station
-    if (customId.startsWith('radio_')) {
-      const stationId = customId.replace('radio_', '');
-      const station = radiosList.find(r => r.id === stationId);
-      if (!station) {
-        await interaction.followUp({ content: '❌ Радиостанция не найдена', ephemeral: true }).catch(() => null);
-        return;
-      }
-      const member = await guild.members.fetch(user.id).catch(() => null);
-      const voiceChannel = member && member.voice ? member.voice.channel : null;
-      if (!voiceChannel) { await interaction.followUp({ content: '❌ Зайдите в голосовой канал, чтобы включить радио.', ephemeral: true }).catch(() => null); return; }
-      await interaction.followUp({ content: `🔁 Включаю ${station.label}...`, ephemeral: true }).catch(() => null);
-      try {
-        await musicPlayer.playNow(guild, voiceChannel, station.url, interaction.channel);
-        await interaction.followUp({ content: `▶️ Радиостанция ${station.label} запущена.`, ephemeral: true }).catch(() => null);
-      } catch (e) {
-        console.error('radio play error', e && e.message);
-        await interaction.followUp({ content: '❌ Ошибка при запуске радиостанции.', ephemeral: true }).catch(() => null);
-      }
-      return;
-    }
+    // radio feature is currently in development; radio buttons are disabled
 
     // Vote handlers
     if (customId.startsWith('vote_')) {

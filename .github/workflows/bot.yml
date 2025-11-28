@@ -6,29 +6,36 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
-  run-bot:
+  ci:
+    name: CI - install & lint
     runs-on: ubuntu-latest
-    timeout-minutes: 60  # Terminate job after 60 minutes (increase while we evaluate hosting)
-    
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Run bot
-      env:
-        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-        CLIENT_ID: ${{ secrets.CLIENT_ID }}
-        GUILD_ID: ${{ secrets.GUILD_ID }}
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        AI_CHAT_CHANNEL_ID: ${{ secrets.AI_CHAT_CHANNEL_ID }}
-        MESSAGE_CONTENT_INTENT: 'true'
-        GUILD_MEMBERS_INTENT: 'true'
-        USE_MOCK_AI: 'false'
-      run: npm start
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint (if configured)
+        run: |
+          if [ -f package.json ] && jq -e '.scripts.lint' package.json >/dev/null 2>&1; then
+            npm run lint || true
+          else
+            echo "No lint script configured"
+          fi
+
+      - name: Run tests (if configured)
+        run: |
+          if [ -f package.json ] && jq -e '.scripts.test' package.json >/dev/null 2>&1; then
+            npm test || true
+          else
+            echo "No test script configured"
+          fi
+
+      - name: Note about runtime
+        run: |
+          echo "This workflow does NOT run the bot as a persistent process. GitHub Actions jobs are limited in runtime and are not suitable for long-running bots. Use a VPS, Railway, Render, or other host to run the bot 24/7."

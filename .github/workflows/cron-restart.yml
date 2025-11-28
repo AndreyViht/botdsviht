@@ -1,0 +1,59 @@
+name: Hourly restart bot
+
+on:
+  schedule:
+    # Runs at minute 0 of every hour
+    - cron: '0 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  restart-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restart remote service via SSH
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+            echo "[restart] Connected to $(hostname)"
+
+            # Try docker restart first
+            if docker ps -a --format '{{.Names}}' | grep -q '^viht-vpn-bot$'; then
+              echo "[restart] Found container 'viht-vpn-bot' — restarting"
+              docker restart viht-vpn-bot || echo "[restart] docker restart failed"
+              exit 0
+            fi
+
+            # Try docker-compose (assumes repository/deploy is present)
+            if [ -f ./deploy/docker-compose.yml ] || [ -f /srv/viht/deploy/docker-compose.yml ]; then
+              echo "[restart] Attempting docker-compose restart (local deploy/docker-compose.yml)"
+              # prefer repo path if exists, otherwise fallback to /srv/viht
+              if [ -f ./deploy/docker-compose.yml ]; then
+                cd ./deploy || true
+              else
+                cd /srv/viht/deploy || true
+              fi
+              docker-compose pull || true
+              docker-compose up -d --build || echo "[restart] docker-compose up failed"
+              exit 0
+            fi
+
+            # Try pm2 (if used)
+            if command -v pm2 >/dev/null 2>&1; then
+              echo "[restart] Attempting pm2 restart viht-vpn-bot"
+              pm2 restart viht-vpn-bot || pm2 start ./bot/index.js --name viht-vpn-bot || echo "[restart] pm2 restart/start failed"
+              exit 0
+            fi
+
+            # Try systemd unit
+            if systemctl --version >/dev/null 2>&1; then
+              echo "[restart] Attempting systemctl restart viht-bot"
+              sudo systemctl restart viht-bot || echo "[restart] systemctl restart failed"
+              exit 0
+            fi
+
+            echo "[restart] No known service found to restart. Please ensure container/service is named 'viht-vpn-bot' or adjust commands in workflow."

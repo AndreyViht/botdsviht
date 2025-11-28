@@ -1,0 +1,20 @@
+[Unit]
+Description=Viht VPN Bot
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/path/to/repo
+Environment=NODE_ENV=production
+# Add your environment variables here or rely on /etc/environment or a .env loader
+# Environment=DISCORD_TOKEN=your_token
+ExecStart=/usr/bin/node /path/to/repo/bot/index.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=viht-vpn-bot
+
+[Install]
+WantedBy=multi-user.target

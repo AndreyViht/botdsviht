@@ -1,0 +1,397 @@
+{
+  "checkedAt": 1764420234056,
+  "results": [
+    {
+      "id": "record_dance",
+      "label": "Record Dance Radio",
+      "url": "http://radio-srv1.11one.ru/record192k.mp3",
+      "ok": false,
+      "error": "connect ECONNREFUSED 93.191.12.44:80"
+    },
+    {
+      "id": "europaplus",
+      "label": "Европа Плюс (ep128)",
+      "url": "http://ep128.hostingradio.ru:8030/ep128",
+      "ok": true,
+      "status": 200,
+      "headers": {
+        "content-type": "audio/mpeg",
+        "date": "Sat, 29 Nov 2025 12:43:30 GMT",
+        "icy-br": "128, 128",
+        "ice-audio-info": "channels=2;samplerate=44100;bitrate=128",
+        "icy-description": "Stream transcoder based on liquidsoap",
+        "icy-genre": "various",
+        "icy-name": "europaplus",
+        "icy-pub": "1",
+        "icy-url": "http://95.213.143.165:8010/europaplus320.mp3",
+        "server": "Icecast 2.4.0-kh10-hss7",
+        "cache-control": "no-cache, no-store",
+        "expires": "Mon, 26 Jul 1997 05:00:00 GMT",
+        "connection": "Close",
+        "set-cookie": [
+          "hssuid=6c67ed5a7d414a7b9fad28516d528558; expires=Sat, 29-Nov-2026 12:43:30 GMT; domain=.hostingradio.ru; path=/; SameSite=None; Secure"
+        ],
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "Origin, Accept, X-Requested-With, Content-Type, Icy-MetaData",
+        "access-control-allow-methods": "GET, OPTIONS, SOURCE, PUT, HEAD, STATS"
+      }
+    },
+    {
+      "id": "europaplus_top40",
+      "label": "Европа Плюс (Top 40)",
+      "url": "http://eptop128server.streamr.ru:8033/eptop128",
+      "ok": true,
+      "status": 200,
+      "headers": {
+        "content-type": "audio/mpeg",
+        "date": "Sat, 29 Nov 2025 12:43:30 GMT",
+        "icy-br": "128, 128",
+        "ice-audio-info": "bitrate=128",
+        "icy-description": "Europa Plus Top40",
+        "icy-genre": "Pop",
+        "icy-name": "Europa Plus Top40",
+        "icy-pub": "0",
+        "server": "Icecast 2.4.0-kh10",
+        "cache-control": "no-cache, no-store",
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "Origin, Accept, X-Requested-With, Content-Type",
+        "access-control-allow-methods": "GET, OPTIONS, HEAD",
+        "connection": "Close",
+        "expires": "Mon, 26 Jul 1997 05:00:00 GMT"
+      }
+    },
+    {
+      "id": "anime",
+      "label": "Anime Radio (AniSonFM)",
+      "url": "http://pool.anison.fm:9000/AniSonFM(320)",
+      "ok": true,
+      "status": 200,
+      "headers": {
+        "content-type": "audio/mpeg",
+        "date": "Sat, 29 Nov 2025 12:44:19 GMT",
+        "icy-br": "320, 320",
+        "ice-audio-info": "channels=2;samplerate=44100;bitrate=320",
+        "icy-description": "Anime Radio #1 in Russia",
+        "icy-genre": "Anime",
+        "icy-name": "ANISON.FM",
+        "icy-pub": "1",
+        "icy-url": "http://anison.fm",
+        "server": "nginx",
+        "cache-control": "no-cache, no-store",
+        "expires": "Mon, 26 Jul 1997 05:00:00 GMT",
+        "connection": "Close",
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "Origin, Accept, X-Requested-With, Content-Type, Icy-MetaData",
+        "access-control-allow-methods": "GET, OPTIONS, SOURCE, PUT, HEAD, STATS"
+      }
+    },
+    {
+      "id": "dfm128",
+      "label": "DFM 128",
+      "url": "https://dfm.hostingradio.ru/dfm128.mp3",
+      "ok": true,
+      "status": 200,
+      "headers": {
+        "content-type": "audio/mpeg",
+        "date": "Sat, 29 Nov 2025 12:43:31 GMT",
+        "icy-description": "DFM MSK",
+        "icy-metadata": "1",
+        "icy-name": "DFM MSK",
+        "icy-pub": "1",
+        "server": "Icecast 2.4.0-kh10-hss8",
+        "cache-control": "no-cache, no-store",
+        "expires": "Mon, 26 Jul 1997 05:00:00 GMT",
+        "connection": "Close",
+        "set-cookie": [
+          "hssuid=8fef86b1d4ad4f7dbaf20c8676bfeb3d; expires=Sat, 29-Nov-2026 12:43:31 GMT; domain=.hostingradio.ru; path=/; SameSite=None; Secure"
+        ],
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "Origin, Accept, X-Requested-With, Content-Type, Icy-MetaData",
+        "access-control-allow-methods": "GET, OPTIONS, SOURCE, PUT, HEAD, STATS"
+      }
+    },
+    {
+      "id": "dfm_dance",
+      "label": "DFM Dance",
+      "url": "http://dfmdance.out.airtime.pro:8000/dfmdance_a",
+      "ok": false,
+      "error": "getaddrinfo ENOTFOUND dfmdance.out.airtime.pro"
+    },
+    {
+      "id": "dacha",
+      "label": "Радио Дача",
+      "url": "http://listen.vdfm.ru:8000/dacha",
+      "ok": true,
+      "status": 200,
+      "headers": {
+        "content-type": "audio/mpeg",
+        "date": "Sat, 29 Nov 2025 12:43:32 GMT",
+        "icy-br": "128",
+        "ice-audio-info": "channels=2;samplerate=44100;bitrate=128",
+        "icy-genre": "Pop",
+        "icy-name": "No Name Station",
+        "icy-pub": "1",
+        "icy-url": "http://vdfm.ru",
+        "server": "Icecast 2.4.0-kh22",
+        "cache-control": "no-cache, no-store",
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "Origin, Accept, X-Requested-With, Content-Type",
+        "access-control-allow-methods": "GET, OPTIONS, HEAD",
+        "connection": "Close",
+        "expires": "Mon, 26 Jul 1997 05:00:00 GMT"
+      }
+    },
+    {
+      "id": "dorozhnoe",
+      "label": "Дорожное радио",
+      "url": "http://dorognoe.hostingradio.ru:8000/dorognoe",
+      "ok": true,
+      "status": 200,
+      "headers": {
+        "content-type": "audio/mpeg",
+        "date": "Sat, 29 Nov 2025 12:43:32 GMT",
+        "icy-br": "64, 64",
+        "ice-audio-info": "channels=2;samplerate=24000;bitrate=64",
+        "icy-description": "Stream transcoder based on liquidsoap",
+        "icy-genre": "various",
+        "icy-name": "dorognoe",
+        "icy-pub": "1",
+        "server": "Icecast 2.4.0-kh10-hss7",
+        "cache-control": "no-cache, no-store",
+        "expires": "Mon, 26 Jul 1997 05:00:00 GMT",
+        "connection": "Close",
+        "set-cookie": [
+          "hssuid=f7d4ba49b33943a89602e54f87111379; expires=Sat, 29-Nov-2026 12:43:32 GMT; domain=.hostingradio.ru; path=/; SameSite=None; Secure"
+        ],
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "Origin, Accept, X-Requested-With, Content-Type, Icy-MetaData",
+        "access-control-allow-methods": "GET, OPTIONS, SOURCE, PUT, HEAD, STATS"
+      }
+    },
+    {
+      "id": "radio_mir",
+      "label": "Радио Мир",
+      "url": "http://icecast.mirtv.cdnvideo.ru:8000/radio_mir128",
+      "ok": true,
+      "status": 404,
+      "headers": {
+        "server": "nginx",
+        "date": "Sat, 29 Nov 2025 12:43:33 GMT",
+        "content-type": "text/html",
+        "content-length": "41",
+        "connection": "keep-alive"
+      }
+    },
+    {
+      "id": "mayak",
+      "label": "Радио Маяк",
+      "url": "http://icecast.vgtrk.cdnvideo.ru/mayakfm_mp3_192kbps",
+      "ok": true,
+      "status": 200,
+      "headers": {
+        "server": "nginx",
+        "date": "Sat, 29 Nov 2025 12:43:33 GMT",
+        "content-type": "audio/mpeg",
+        "connection": "close",
+        "icy-br": "192, 192",
+        "ice-audio-info": "bitrate=192;channels=2;samplerate=48000",
+        "icy-description": "Radio Mayak FM (VGTRK)",
+        "icy-genre": "Various",
+        "icy-name": "Radio Mayak FM",
+        "icy-pub": "1",
+        "cache-control": "no-cache, no-store",
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "Origin, Accept, X-Requested-With, Content-Type",
+        "access-control-allow-methods": "GET, OPTIONS, HEAD",
+        "expires": "Mon, 26 Jul 1997 05:00:00 GMT",
+        "accept-ranges": "none",
+        "x-cdn-location": "Moscow"
+      }
+    },
+    {
+      "id": "maximum",
+      "label": "Радио Максимум",
+      "url": "https://maximum.hostingradio.ru/maximum128.mp3",
+      "ok": true,
+      "status": 200,
+      "headers": {
+        "content-type": "audio/mpeg",
+        "date": "Sat, 29 Nov 2025 12:43:34 GMT",
+        "icy-description": "MAX MSK",
+        "icy-metadata": "1",
+        "icy-name": "MAX MSK",
+        "icy-pub": "1",
+        "server": "Icecast 2.4.0-kh10",
+        "cache-control": "no-cache, no-store",
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "Origin, Accept, X-Requested-With, Content-Type",
+        "access-control-allow-methods": "GET, OPTIONS, HEAD",
+        "connection": "Close",
+        "expires": "Mon, 26 Jul 1997 05:00:00 GMT"
+      }
+    },
+    {
+      "id": "nashe",
+      "label": "Наше Радио",
+      "url": "http://nashe1.hostingradio.ru/nashe-128.mp3",
+      "ok": true,
+      "status": 200,
+      "headers": {
+        "content-type": "audio/mpeg",
+        "date": "Sat, 29 Nov 2025 12:43:35 GMT",
+        "icy-description": "NASHE Radio (Moscow) 101.8 FM",
+        "icy-genre": "Rock",
+        "icy-metadata": "1",
+        "icy-name": "NASHE Radio (Moscow) 101.8 FM",
+        "icy-pub": "1",
+        "icy-url": "https://www.nashe.ru",
+        "server": "Icecast 2.4.0-kh10-hss7",
+        "cache-control": "no-cache, no-store",
+        "expires": "Mon, 26 Jul 1997 05:00:00 GMT",
+        "connection": "Close",
+        "set-cookie": [
+          "hssuid=60184f87966b4e5398a50277fa38adae; expires=Sat, 29-Nov-2026 12:43:35 GMT; domain=.hostingradio.ru; path=/; SameSite=None; Secure"
+        ],
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "Origin, Accept, X-Requested-With, Content-Type, Icy-MetaData",
+        "access-control-allow-methods": "GET, OPTIONS, SOURCE, PUT, HEAD, STATS"
+      }
+    },
+    {
+      "id": "nostalgia",
+      "label": "Ностальгия FM",
+      "url": "http://nostalgiafm.hostingradio.ru:8000/nostalgiafm.mp3",
+      "ok": false,
+      "error": "timeout"
+    },
+    {
+      "id": "loveis",
+      "label": "Love Is Radio",
+      "url": "http://listen1.myradio24.com:9000/3355",
+      "ok": true,
+      "status": 200,
+      "headers": {
+        "server": "Vmeste v1.7",
+        "date": "Sat, 29 Nov 2025 12:43:44 GMT",
+        "expires": "Mon, 26 Jul 1997 05:00:00 GMT",
+        "cache-control": "no-store, no-cache",
+        "connection": "close",
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET, OPTIONS, HEAD",
+        "access-control-allow-headers": "Origin, Accept, Content-Type, X-Requested-With",
+        "content-type": "audio/mpeg",
+        "icy-br": "128",
+        "icy-name": "LOVE IS RADIO",
+        "icy-djname": "LOVE IS RADIO",
+        "icy-description": "LOVE IS RADIO",
+        "icy-url": "https://loveisradio.by",
+        "icy-pro": "1"
+      }
+    },
+    {
+      "id": "zaycev",
+      "label": "Zaycev FM",
+      "url": "http://zaycevfm.cdnvideo.ru/ZaycevFM_rus_128.mp3",
+      "ok": false,
+      "error": "getaddrinfo ENOTFOUND zaycevfm.cdnvideo.ru"
+    },
+    {
+      "id": "nostalgic_lofi",
+      "label": "Lo-fi Hip Hop Radio",
+      "url": "http://node-33.zeno.fm/0r0xa792kwzuv?rj-ttl=5&rj-tok=AAABfMtdjJ4AtC1pGWo1_ohFMw",
+      "ok": false,
+      "error": 401
+    },
+    {
+      "id": "radio_set",
+      "label": "RADIO-SET",
+      "url": "http://live.radio-set.ru:8000/best",
+      "ok": false,
+      "error": "timeout"
+    },
+    {
+      "id": "rusradio",
+      "label": "Русское Радио",
+      "url": "https://rusradio.hostingradio.ru/rusradio128.mp3",
+      "ok": true,
+      "status": 200,
+      "headers": {
+        "content-type": "audio/mpeg",
+        "date": "Sat, 29 Nov 2025 12:43:56 GMT",
+        "icy-description": "RR MSK",
+        "icy-metadata": "1",
+        "icy-name": "RR MSK",
+        "icy-pub": "1",
+        "server": "Icecast 2.4.0-kh10",
+        "cache-control": "no-cache, no-store",
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "Origin, Accept, X-Requested-With, Content-Type",
+        "access-control-allow-methods": "GET, OPTIONS, HEAD",
+        "connection": "Close",
+        "expires": "Mon, 26 Jul 1997 05:00:00 GMT"
+      }
+    }
+  ],
+  "working": [
+    {
+      "id": "europaplus",
+      "label": "Европа Плюс (ep128)",
+      "url": "http://ep128.hostingradio.ru:8030/ep128"
+    },
+    {
+      "id": "europaplus_top40",
+      "label": "Европа Плюс (Top 40)",
+      "url": "http://eptop128server.streamr.ru:8033/eptop128"
+    },
+    {
+      "id": "anime",
+      "label": "Anime Radio (AniSonFM)",
+      "url": "http://pool.anison.fm:9000/AniSonFM(320)"
+    },
+    {
+      "id": "dfm128",
+      "label": "DFM 128",
+      "url": "https://dfm.hostingradio.ru/dfm128.mp3"
+    },
+    {
+      "id": "dacha",
+      "label": "Радио Дача",
+      "url": "http://listen.vdfm.ru:8000/dacha"
+    },
+    {
+      "id": "dorozhnoe",
+      "label": "Дорожное радио",
+      "url": "http://dorognoe.hostingradio.ru:8000/dorognoe"
+    },
+    {
+      "id": "radio_mir",
+      "label": "Радио Мир",
+      "url": "http://icecast.mirtv.cdnvideo.ru:8000/radio_mir128"
+    },
+    {
+      "id": "mayak",
+      "label": "Радио Маяк",
+      "url": "http://icecast.vgtrk.cdnvideo.ru/mayakfm_mp3_192kbps"
+    },
+    {
+      "id": "maximum",
+      "label": "Радио Максимум",
+      "url": "https://maximum.hostingradio.ru/maximum128.mp3"
+    },
+    {
+      "id": "nashe",
+      "label": "Наше Радио",
+      "url": "http://nashe1.hostingradio.ru/nashe-128.mp3"
+    },
+    {
+      "id": "loveis",
+      "label": "Love Is Radio",
+      "url": "http://listen1.myradio24.com:9000/3355"
+    },
+    {
+      "id": "rusradio",
+      "label": "Русское Радио",
+      "url": "https://rusradio.hostingradio.ru/rusradio128.mp3"
+    }
+  ]
+}

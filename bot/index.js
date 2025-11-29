@@ -450,7 +450,7 @@ client.once('ready', async () => {
 
     if (!panelCheck) {
       // Post new panel
-      const msg = await controlChannel.send({ embeds: [musicEmbed], components: [controlRow] }).catch(() => null);
+      const msg = await controlChannel.send({ embeds: [mainEmbed], components: [controlRow] }).catch(() => null);
       if (msg && db && db.set) {
         await db.set(panelCheckKey, { channelId: CONTROL_PANEL_CHANNEL_ID, messageId: msg.id, postedAt: Date.now() });
       }
@@ -470,6 +470,30 @@ client.once('ready', async () => {
         console.log('Reposted control panel to', CONTROL_PANEL_CHANNEL_ID);
       }
     }
+    // Periodic assurance: ensure the control panel message remains present. Run every 5 minutes.
+    try {
+      const ensureControlPanelExists = async () => {
+        try {
+          const rec = db.get(panelCheckKey);
+          if (!rec || !rec.messageId) {
+            // No record — post a fresh one
+            const posted = await controlChannel.send({ embeds: [mainEmbed], components: [controlRow] }).catch(() => null);
+            if (posted && db && db.set) await db.set(panelCheckKey, { channelId: CONTROL_PANEL_CHANNEL_ID, messageId: posted.id, postedAt: Date.now() });
+            console.log('[PanelCheck] Posted missing control panel message');
+            return;
+          }
+          // Try to fetch the message
+          const fetched = await controlChannel.messages.fetch(rec.messageId).catch(() => null);
+          if (!fetched) {
+            const repost = await controlChannel.send({ embeds: [mainEmbed], components: [controlRow] }).catch(() => null);
+            if (repost && db && db.set) await db.set(panelCheckKey, { channelId: CONTROL_PANEL_CHANNEL_ID, messageId: repost.id, postedAt: Date.now() });
+            console.log('[PanelCheck] Reposted control panel message');
+          }
+        } catch (err) { console.warn('[PanelCheck] ensure error', err && err.message ? err.message : err); }
+      };
+      // Run first check in 5 minutes, then every 5 minutes
+      setInterval(ensureControlPanelExists, 5 * 60 * 1000);
+    } catch (e) { console.warn('Failed starting control panel assurance interval:', e && e.message ? e.message : e); }
   } catch (e) { console.warn('Failed to post control panel on ready:', e && e.message ? e.message : e); }
 });
 

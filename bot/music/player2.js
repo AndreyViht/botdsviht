@@ -52,18 +52,41 @@ async function saveQueueForGuild(guildId) {
 
 async function findYouTubeUrl(query) {
   if (!query) return null;
-  if (/^https?:\/\//i.test(query)) return query;
+  
+  // Extract title from URL if it's a YouTube link, otherwise use query as-is
+  let searchQuery = query;
+  if (/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)/.test(query)) {
+    // Extract video ID
+    let vidId = null;
+    const youtubeMatch = query.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (youtubeMatch) vidId = youtubeMatch[1];
+    
+    // Try to get video title via yt-search by ID (or just search by partial info)
+    if (vidId) {
+      searchQuery = `youtube ${vidId}`;
+    }
+  }
+  
   try {
     // Try direct search and collect candidates
-    let r = await yts(query);
+    let r = await yts(searchQuery);
     let vids = r && r.videos && r.videos.length ? r.videos.filter(v => !v.live && v.seconds > 0) : [];
+    
     // Try adding 'audio' keyword if nothing found
     if (!vids.length) {
-      r = await yts(`${query} audio`);
+      r = await yts(`${searchQuery} audio`);
       vids = r && r.videos && r.videos.length ? r.videos.filter(v => !v.live && v.seconds > 0) : [];
     }
+    
+    // Try broader search if still empty
+    if (!vids.length) {
+      r = await yts(query.split('?')[0].split('/').pop() || query);
+      vids = r && r.videos && r.videos.length ? r.videos.filter(v => !v.live && v.seconds > 0) : [];
+    }
+    
     // Fallback to any video results if still empty
     if (!vids.length && r && r.videos && r.videos.length) vids = r.videos;
+    
     const candidates = vids.map(v => ({ url: v.url, title: v.title }));
     return candidates.length ? { candidates } : null;
   } catch (e) {
@@ -86,15 +109,21 @@ async function streamFromUrl(url) {
 
 async function getStreamFromYtDlp(url) {
   return new Promise((resolve) => {
-    const cmd = `yt-dlp -f best -g "${url.replace(/"/g, '\\"')}" 2>/dev/null`;
-    exec(cmd, { timeout: 30000, maxBuffer: 1024 * 1024 }, (err, stdout) => {
-      if (err || !stdout) {
-        console.warn('yt-dlp --get-url failed:', err && err.message);
+    const cmd = `yt-dlp -f "bestaudio" -g "${url.replace(/"/g, '\\"')}" 2>&1`;
+    exec(cmd, { timeout: 30000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err || !stdout || stdout.includes('ERROR')) {
+        console.warn('yt-dlp failed:', err && err.message, 'stderr:', stderr || '');
         resolve(null);
       } else {
-        const lines = stdout.trim().split('\n');
+        const lines = stdout.trim().split('\n').filter(l => l.trim() && !l.startsWith('['));
         const directUrl = lines[lines.length - 1];
-        resolve(directUrl || null);
+        if (directUrl && directUrl.startsWith('http')) {
+          console.log('yt-dlp extracted URL:', directUrl.substring(0, 80));
+          resolve(directUrl);
+        } else {
+          console.warn('yt-dlp output invalid:', lines);
+          resolve(null);
+        }
       }
     });
   });

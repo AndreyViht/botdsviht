@@ -76,13 +76,13 @@ async function handleMusicButton(interaction) {
       }
 
       try {
-        // Play radio stream
-        await musicPlayer.playNow(guild, voiceChannel, radio.url, interaction.channel);
-          // For radio streams, mark as direct URL so it doesn't try YouTube search
-          // Pass radio as special object that player2 recognizes
-          const radioStream = { isDirectStream: true, url: radio.url };
-          await musicPlayer.playRadio(guild, voiceChannel, radioStream, interaction.channel);
-        
+        // Play radio stream directly (bypass YouTube search)
+        const radioStream = { url: radio.url };
+        const ok = await musicPlayer.playRadio(guild, voiceChannel, radioStream, interaction.channel);
+        if (!ok) {
+          return await interaction.editReply({ content: '❌ Не удалось подключиться к радиостанции.', flags: 64 });
+        }
+
         // Store active radio info
         activeRadios.set(guild.id, { radio, userId: user.id });
 

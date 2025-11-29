@@ -1,9 +1,20 @@
 [
-  { "id": "europaplus", "label": "🇷🇺 Европа Плюс", "url": "https://ep256.hostingradio.ru:8443/ep256" },
-  { "id": "recordfm", "label": "🇷🇺 Record FM", "url": "https://streamradio.recordfm.ru:8443/recordfm" },
-  { "id": "nashe", "label": "🇷🇺 Наше Радио", "url": "https://nasheradio.hostingradio.ru:8443/nasheradio_aac" },
-  { "id": "retro", "label": "🇷🇺 Ретро FM", "url": "https://retroradio.hostingradio.ru:8443/retro_aac" },
-  { "id": "love", "label": "❤️ Love Radio", "url": "https://loveradio.hostingradio.ru:8443/loveradio" },
-  { "id": "dfm", "label": "🇷🇺 DFM", "url": "https://dfm.hostingradio.ru:8443/dfm" },
-  { "id": "mtv", "label": "🎵 MTV Hits", "url": "https://mtv.hostingradio.ru:8443/mtv_aac" }
+  { "id": "record_dance", "label": "Record Dance Radio", "url": "http://radio-srv1.11one.ru/record192k.mp3" },
+  { "id": "europaplus", "label": "Европа Плюс (ep128)", "url": "http://ep128.hostingradio.ru:8030/ep128" },
+  { "id": "europaplus_top40", "label": "Европа Плюс (Top 40)", "url": "http://eptop128server.streamr.ru:8033/eptop128" },
+  { "id": "anime", "label": "Anime Radio (AniSonFM)", "url": "http://pool.anison.fm:9000/AniSonFM(320)" },
+  { "id": "dfm128", "label": "DFM 128", "url": "https://dfm.hostingradio.ru/dfm128.mp3" },
+  { "id": "dfm_dance", "label": "DFM Dance", "url": "http://dfmdance.out.airtime.pro:8000/dfmdance_a" },
+  { "id": "dacha", "label": "Радио Дача", "url": "http://listen.vdfm.ru:8000/dacha" },
+  { "id": "dorozhnoe", "label": "Дорожное радио", "url": "http://dorognoe.hostingradio.ru:8000/dorognoe" },
+  { "id": "radio_mir", "label": "Радио Мир", "url": "http://icecast.mirtv.cdnvideo.ru:8000/radio_mir128" },
+  { "id": "mayak", "label": "Радио Маяк", "url": "http://icecast.vgtrk.cdnvideo.ru/mayakfm_mp3_192kbps" },
+  { "id": "maximum", "label": "Радио Максимум", "url": "https://maximum.hostingradio.ru/maximum128.mp3" },
+  { "id": "nashe", "label": "Наше Радио", "url": "http://nashe1.hostingradio.ru/nashe-128.mp3" },
+  { "id": "nostalgia", "label": "Ностальгия FM", "url": "http://nostalgiafm.hostingradio.ru:8000/nostalgiafm.mp3" },
+  { "id": "loveis", "label": "Love Is Radio", "url": "http://listen1.myradio24.com:9000/3355" },
+  { "id": "zaycev", "label": "Zaycev FM", "url": "http://zaycevfm.cdnvideo.ru/ZaycevFM_rus_128.mp3" },
+  { "id": "nostalgic_lofi", "label": "Lo-fi Hip Hop Radio", "url": "http://node-33.zeno.fm/0r0xa792kwzuv?rj-ttl=5&rj-tok=AAABfMtdjJ4AtC1pGWo1_ohFMw" },
+  { "id": "radio_set", "label": "RADIO-SET", "url": "http://live.radio-set.ru:8000/best" },
+  { "id": "rusradio", "label": "Русское Радио", "url": "https://rusradio.hostingradio.ru/rusradio128.mp3" }
 ]

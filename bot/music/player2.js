@@ -100,91 +100,90 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
       }
 
     let resource = null;
-    if (isYouTubeUrl(url)) {
-      // If findYouTubeUrl returned candidates object, try them sequentially
+    let resolvedUrl = null;
+
+    // Handle findYouTubeUrl return types: it may return a string (direct URL) or an object { candidates: [...] }
+    const candidates = [];
+    if (typeof url === 'string') {
+      // plain string — could be YouTube or direct link
+      if (isYouTubeUrl(url)) candidates.push(url);
+      else {
+        // direct non-YouTube URL: try to stream it directly
+        const stream = await streamFromUrl(url);
+        if (!stream) { if (textChannel && textChannel.send) await textChannel.send('❌ Не удалось открыть поток.'); return false; }
+        resource = createAudioResource(stream, { inlineVolume: true });
+        resolvedUrl = url;
+      }
+    } else if (url && Array.isArray(url.candidates)) {
+      for (const c of url.candidates) {
+        candidates.push(c.url || c);
+      }
+    }
+
+    if (candidates.length > 0) {
       const attempted = [];
-      try {
-        // If callers passed an object with candidates, iterate; otherwise use the single url
-        const candidates = (typeof url === 'string') ? [{ url }] : (url.candidates || []);
-        let lastErr = null;
-        for (const c of candidates) {
-          const candidateUrl = c.url || c;
-          attempted.push(candidateUrl);
-          try {
-            // verify info first
-            await ytdl.getInfo(candidateUrl);
-            // try high quality then low quality
-            let stream = null;
-            try { stream = ytdl(candidateUrl, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
-            if (!stream) {
-              try { stream = ytdl(candidateUrl, { filter: 'audioonly', quality: 'lowestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
-            }
-            if (!stream) throw new Error('ytdl failed to create stream');
+      let lastErr = null;
+      // iterate candidates sequentially
+      for (const candidateUrl of candidates) {
+        attempted.push(candidateUrl);
+        // 1) try ytdl
+        try {
+          await ytdl.getInfo(candidateUrl);
+          let stream = null;
+          try { stream = ytdl(candidateUrl, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
+          if (!stream) {
+            try { stream = ytdl(candidateUrl, { filter: 'audioonly', quality: 'lowestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
+          }
+          if (stream) {
             resource = createAudioResource(stream, { inlineVolume: true });
-            // success
-            url = candidateUrl;
+            resolvedUrl = candidateUrl;
             break;
-          } catch (err) {
-            lastErr = err;
-            console.warn('ytdl candidate failed', candidateUrl, err && err.message);
-            continue;
           }
+        } catch (e) {
+          lastErr = e;
+          console.warn('ytdl failed for candidate', candidateUrl, e && e.message);
         }
+
+        // 2) try play-dl fallback
+        if (!resource && playdl) {
+          try {
+            const pl = await playdl.stream(candidateUrl).catch(() => null);
+            if (pl && pl.stream) {
+              resource = createAudioResource(pl.stream, { inlineVolume: true });
+              resolvedUrl = candidateUrl;
+              break;
+            }
+          } catch (e) { console.warn('play-dl failed for candidate', candidateUrl, e && e.message); }
+        }
+
+        // 3) try yt-dlp via npx to get direct audio URL
         if (!resource) {
-          // try play-dl fallback if available
-          if (playdl) {
-            for (const c of attempted) {
-              try {
-                const pl = await playdl.stream(c).catch(() => null);
-                if (pl && pl.stream) {
-                  resource = createAudioResource(pl.stream, { inlineVolume: true });
-                  url = c;
-                  break;
-                }
-              } catch (ee) {
-                console.warn('play-dl candidate failed', c, ee && ee.message);
-                continue;
+          try {
+            const cmd = `npx -y yt-dlp -f bestaudio -g ${JSON.stringify(candidateUrl)}`;
+            const direct = await new Promise((resolve, reject) => {
+              exec(cmd, { timeout: 20000, windowsHide: true }, (err, stdout, stderr) => {
+                if (err) return reject(err);
+                const out = (stdout || '').trim().split(/\r?\n/)[0];
+                resolve(out || null);
+              });
+            }).catch(e => null);
+            if (direct) {
+              const s = await streamFromUrl(direct);
+              if (s) {
+                resource = createAudioResource(s, { inlineVolume: true });
+                resolvedUrl = candidateUrl;
+                break;
               }
             }
-          }
-          // If still no resource, try yt-dlp via npx to get direct audio URL
-          if (!resource) {
-            for (const c of attempted) {
-              try {
-                const candidate = c;
-                const cmd = `npx -y yt-dlp -f bestaudio -g ${JSON.stringify(candidate)}`;
-                const direct = await new Promise((resolve, reject) => {
-                  exec(cmd, { timeout: 20000, windowsHide: true }, (err, stdout, stderr) => {
-                    if (err) return reject(err);
-                    const out = (stdout || '').trim().split(/\r?\n/)[0];
-                    resolve(out || null);
-                  });
-                }).catch(e => null);
-                if (direct) {
-                  const s = await streamFromUrl(direct);
-                  if (s) {
-                    resource = createAudioResource(s, { inlineVolume: true });
-                    url = candidate;
-                    break;
-                  }
-                }
-              } catch (ee) {
-                console.warn('yt-dlp candidate failed', c, ee && ee.message);
-                continue;
-              }
-            }
-          }
-          if (!resource) throw lastErr || new Error('No ytdl candidate succeeded');
+          } catch (e) { console.warn('yt-dlp failed for candidate', candidateUrl, e && e.message); }
         }
-      } catch (e) {
-        console.error('ytdl stream error', e && e.stack ? e.stack : e && e.message ? e.message : e);
+      }
+
+      if (!resource) {
+        console.error('All YouTube candidates failed:', attempted, lastErr && (lastErr.stack || lastErr.message || lastErr));
         if (textChannel && textChannel.send) await textChannel.send('❌ Ошибка при получении аудиопотока с YouTube. Попробуйте другой запрос или ссылку.');
         return false;
       }
-    } else {
-      const stream = await streamFromUrl(url);
-      if (!stream) { if (textChannel && textChannel.send) await textChannel.send('❌ Не удалось открыть поток.'); return false; }
-      resource = createAudioResource(stream, { inlineVolume: true });
     }
 
     resource.volume.setVolume(state.volume || 1.0);

@@ -3,6 +3,21 @@ const path = require('path');
 const { Client, Collection, GatewayIntentBits, Partials, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ChannelType } = require('discord.js');
 const { token } = require('./config');
 
+// Ensure ffmpeg binary is available to downstream modules (ffmpeg-static provides a binary)
+try {
+  const ffpath = require('ffmpeg-static');
+  if (ffpath) {
+    process.env.FFMPEG_PATH = ffpath;
+    process.env.FFMPEG = ffpath;
+    // add containing dir to PATH so native spawn('ffmpeg') can find it
+    const ffdir = path.dirname(ffpath);
+    if (process.env.PATH && !process.env.PATH.includes(ffdir)) process.env.PATH = `${process.env.PATH}${path.delimiter}${ffdir}`;
+    console.log('ffmpeg-static found and PATH updated');
+  }
+} catch (e) {
+  console.warn('ffmpeg-static not available; ensure ffmpeg is installed in PATH for audio playback');
+}
+
 if (!token) console.warn('DISCORD_TOKEN not set in env — set it in .env before starting the bot');
 
 // Intents
@@ -87,6 +102,7 @@ const { sendPrompt } = require('./ai/vihtAi');
 const musicPlayer = require('./music/player2');
 const { handleMusicButton } = require('./music-interface/musicHandler');
 const { handleControlPanelButton } = require('./music-interface/controlPanelHandler');
+const { handlePriceButton } = require('./price/priceHandler');
 
 // optional helpers
 let handleReactionAdd = null;
@@ -154,6 +170,12 @@ client.on('interactionCreate', async (interaction) => {
         }
         await db.set('tickets', tickets);
         await safeReply(interaction, { content: `Готово — закрыто обращений: ${closedCount}`, ephemeral: true });
+      }
+
+      // Price menu buttons
+      if (interaction.customId && interaction.customId.startsWith('price_')) {
+        try { await handlePriceButton(interaction); } catch (err) { console.error('Price button error', err); await safeReply(interaction, { content: 'Ошибка при обработке прайса.', ephemeral: true }); }
+        return;
       }
 
       // Music/Radio buttons
@@ -494,7 +516,30 @@ client.once('ready', async () => {
       // Run first check in 5 minutes, then every 5 minutes
       setInterval(ensureControlPanelExists, 5 * 60 * 1000);
     } catch (e) { console.warn('Failed starting control panel assurance interval:', e && e.message ? e.message : e); }
-  } catch (e) { console.warn('Failed to post control panel on ready:', e && e.message ? e.message : e); }
+  // After control panel: post price / information panel
+  try {
+    const PRICE_CHANNEL_ID = '1443194062269321357';
+    const priceKey = 'pricePanelPosted';
+    const priceChannel = await client.channels.fetch(PRICE_CHANNEL_ID).catch(() => null);
+    if (!priceChannel) {
+      console.warn('Price channel not found:', PRICE_CHANNEL_ID);
+    } else {
+      const { createPriceMainEmbed, getMainRow } = require('./price/priceEmbeds');
+      const rec = db.get(priceKey);
+      const mainEmbed = createPriceMainEmbed();
+      const mainRow = getMainRow();
+      if (!rec) {
+        const msg = await priceChannel.send({ embeds: [mainEmbed], components: [mainRow] }).catch(() => null);
+        if (msg && db && db.set) await db.set(priceKey, { channelId: PRICE_CHANNEL_ID, messageId: msg.id, postedAt: Date.now() });
+        console.log('Posted price panel to', PRICE_CHANNEL_ID);
+      } else {
+        const existing = await priceChannel.messages.fetch(rec.messageId).catch(() => null);
+        if (existing) { await existing.edit({ embeds: [mainEmbed], components: [mainRow] }).catch(() => null); console.log('Updated existing price panel message'); }
+        else { const msg = await priceChannel.send({ embeds: [mainEmbed], components: [mainRow] }).catch(() => null); if (msg && db && db.set) await db.set(priceKey, { channelId: PRICE_CHANNEL_ID, messageId: msg.id, postedAt: Date.now() }); console.log('Reposted price panel to', PRICE_CHANNEL_ID); }
+      }
+    }
+  } catch (e) { console.warn('Failed to post price panel on ready:', e && e.message ? e.message : e); }
+} catch (e) { console.warn('Failed to post control panel on ready:', e && e.message ? e.message : e); }
 });
 
 // Global safety handlers to avoid process crash on uncaught errors

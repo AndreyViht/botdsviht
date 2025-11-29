@@ -5,6 +5,7 @@ let playdl = null;
 try { playdl = require('play-dl'); } catch (e) { playdl = null; }
 const { exec } = require('child_process');
 const db = require('../libs/db');
+const { Readable, PassThrough } = require('stream');
 
 // single in-memory state map
 const players = new Map();
@@ -101,9 +102,60 @@ function isYouTubeUrl(url) {
 
 async function streamFromUrl(url) {
   try {
-    const res = await fetch(url);
-    if (!res || !res.body) throw new Error('No response body');
-    return res.body;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      // request ICY metadata to some streams (optional)
+      'Icy-MetaData': '1'
+    };
+    const res = await fetch(url, { headers, signal: controller.signal, redirect: 'follow' });
+    clearTimeout(timeout);
+    if (!res || !res.body) {
+      console.warn('streamFromUrl: no response body for', url);
+      return null;
+    }
+    if (!res.ok && res.status >= 400) {
+      console.warn('streamFromUrl: non-ok status', res.status, 'for', url);
+      return null;
+    }
+
+    // If body is already a Node.js stream (has .pipe), return it directly
+    const body = res.body;
+    if (body && typeof body.pipe === 'function') {
+      return body;
+    }
+
+    // If it's a WHATWG ReadableStream (web stream), convert to Node Readable
+    try {
+      if (typeof Readable.fromWeb === 'function' && body && typeof body.getReader === 'function') {
+        return Readable.fromWeb(body);
+      }
+    } catch (e) {
+      // continue to fallback
+    }
+
+    // Fallback: pipe into a PassThrough by reading via async iterator
+    try {
+      const pass = new PassThrough();
+      (async () => {
+        try {
+          for await (const chunk of body) {
+            if (!pass.write(chunk)) await new Promise(r => pass.once('drain', r));
+          }
+        } catch (e) {
+          // ignore
+        } finally {
+          pass.end();
+        }
+      })();
+      return pass;
+    } catch (e) {
+      console.warn('streamFromUrl conversion failed', e && e.message);
+      return null;
+    }
   } catch (e) { console.warn('streamFromUrl failed', e && e.message); return null; }
 }
 
@@ -356,7 +408,13 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel) {
     const resource = createAudioResource(stream, { inlineVolume: true });
     resource.volume.setVolume(state.volume);
     state.player.stop();
-    state.player.play(resource);
+    try {
+      state.player.play(resource);
+    } catch (e) {
+      console.error('playRadio: player.play failed', e && e.message ? e.message : e);
+      if (textChannel && textChannel.send) await textChannel.send(`❌ Ошибка при запуске плеера: ${String(e && e.message || e).slice(0,200)}`);
+      return false;
+    }
     connection.subscribe(state.player);
     state.playing = true;
     state.current = { url, title: 'Radio Stream' };

@@ -6,8 +6,7 @@
   "scripts": {
     "start": "node bot/index.js",
     "start:dev": "nodemon bot/index.js",
-    "register-commands": "node bot/commands/register-commands.js",
-    "dashboard": "node dashboard/app.js"
+    "register-commands": "node bot/commands/register-commands.js"
   },
   "author": "",
   "license": "MIT",
@@ -21,7 +20,6 @@
     "yt-search": "^2.10.4",
     "play-dl": "^1.9.0",
     "dotenv": "^16.0.0",
-    "express": "^4.18.2",
     "lowdb": "^3.0.0"
   },
   "devDependencies": {

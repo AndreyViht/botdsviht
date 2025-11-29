@@ -128,31 +128,9 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
       for (const candidateUrl of candidates) {
         attempted.push(candidateUrl);
         const detail = { candidate: candidateUrl, attempts: [] };
-        // 1) try ytdl
-        try {
-          await ytdl.getInfo(candidateUrl);
-          let stream = null;
-          try { stream = ytdl(candidateUrl, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
-          if (!stream) {
-            try { stream = ytdl(candidateUrl, { filter: 'audioonly', quality: 'lowestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
-          }
-          if (stream) {
-            resource = createAudioResource(stream, { inlineVolume: true });
-            resolvedUrl = candidateUrl;
-            detail.attempts.push({ method: 'ytdl-core', ok: true });
-            attemptDetails.push(detail);
-            break;
-          } else {
-            detail.attempts.push({ method: 'ytdl-core', ok: false, error: 'no stream' });
-          }
-        } catch (e) {
-          lastErr = e;
-          detail.attempts.push({ method: 'ytdl-core', ok: false, error: String(e && e.message || e) });
-          console.warn('ytdl failed for candidate', candidateUrl, e && e.message);
-        }
 
-        // 2) try play-dl fallback
-        if (!resource && playdl) {
+        // 1) try play-dl FIRST (more reliable for YouTube)
+        if (playdl) {
           try {
             const pl = await playdl.stream(candidateUrl).catch(() => null);
             if (pl && pl.stream) {
@@ -164,38 +142,34 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
             } else {
               detail.attempts.push({ method: 'play-dl', ok: false, error: 'no stream' });
             }
-          } catch (e) { detail.attempts.push({ method: 'play-dl', ok: false, error: String(e && e.message || e) }); console.warn('play-dl failed for candidate', candidateUrl, e && e.message); }
-        } else if (!playdl) {
+          } catch (e) { detail.attempts.push({ method: 'play-dl', ok: false, error: String(e && e.message || e) }); console.warn('play-dl failed for candidate', candidateUrl, e && e.message); lastErr = e; }
+        } else {
           detail.attempts.push({ method: 'play-dl', ok: false, error: 'play-dl not installed' });
         }
 
-        // 3) try yt-dlp via npx to get direct audio URL
+        // 2) try ytdl-core fallback
         if (!resource) {
           try {
-            const cmd = `npx -y yt-dlp -f bestaudio -g ${JSON.stringify(candidateUrl)}`;
-            const direct = await new Promise((resolve, reject) => {
-              exec(cmd, { timeout: 20000, windowsHide: true }, (err, stdout, stderr) => {
-                if (err) return reject({ err, stderr: String(stderr || '') });
-                const out = (stdout || '').trim().split(/\r?\n/)[0];
-                resolve(out || null);
-              });
-            }).catch(e => {
-              detail.attempts.push({ method: 'yt-dlp', ok: false, error: e && e.err ? String(e.err.message || e.err) + ' | stderr: ' + (e.stderr || '') : String(e) });
-              return null;
-            });
-            if (direct) {
-              const s = await streamFromUrl(direct);
-              if (s) {
-                resource = createAudioResource(s, { inlineVolume: true });
-                resolvedUrl = candidateUrl;
-                detail.attempts.push({ method: 'yt-dlp', ok: true });
-                attemptDetails.push(detail);
-                break;
-              } else {
-                detail.attempts.push({ method: 'yt-dlp', ok: false, error: 'failed to stream direct url' });
-              }
+            await ytdl.getInfo(candidateUrl);
+            let stream = null;
+            try { stream = ytdl(candidateUrl, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
+            if (!stream) {
+              try { stream = ytdl(candidateUrl, { filter: 'audioonly', quality: 'lowestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
             }
-          } catch (e) { detail.attempts.push({ method: 'yt-dlp', ok: false, error: String(e && e.message || e) }); lastErr = e; console.warn('yt-dlp failed for candidate', candidateUrl, e && e.message); }
+            if (stream) {
+              resource = createAudioResource(stream, { inlineVolume: true });
+              resolvedUrl = candidateUrl;
+              detail.attempts.push({ method: 'ytdl-core', ok: true });
+              attemptDetails.push(detail);
+              break;
+            } else {
+              detail.attempts.push({ method: 'ytdl-core', ok: false, error: 'no stream' });
+            }
+          } catch (e) {
+            lastErr = e;
+            detail.attempts.push({ method: 'ytdl-core', ok: false, error: String(e && e.message || e) });
+            console.warn('ytdl failed for candidate', candidateUrl, e && e.message);
+          }
         }
 
         attemptDetails.push(detail);

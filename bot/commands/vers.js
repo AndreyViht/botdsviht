@@ -14,10 +14,22 @@ module.exports = {
       const isAllowed = member && member.roles && member.roles.cache && member.roles.cache.has(CONTROL_ROLE_ID);
       if (!isAllowed) return await interaction.reply({ content: 'У вас нет прав для этой команды.', ephemeral: true });
 
+      // Read version from VERSION file if present
+      const fs = require('fs');
+      const path = require('path');
+      let version = 'v-0.037';
+      try {
+        const vf = path.join(process.cwd(), 'VERSION');
+        if (fs.existsSync(vf)) {
+          const vv = fs.readFileSync(vf, 'utf8').trim();
+          if (vv) version = `v-${vv}`;
+        }
+      } catch (e) { /* ignore */ }
+
       const embed = new EmbedBuilder()
         .setTitle('Версия бота')
         .setColor(0x00AE86)
-        .setDescription('Версия: **v-0.037**')
+        .setDescription(`Версия: **${version}**`)
         .setFooter({ text: 'Viht Bot' });
 
       await interaction.reply({ embeds: [embed], ephemeral: false });

@@ -99,6 +99,45 @@ async function saveQueueForGuild(guildId) {
   } catch (e) { console.warn('saveQueueForGuild failed', e && e.message); }
 }
 
+// Helper: update control message with error or status and back button
+async function updateControlMessageWithError(guildId, client, content) {
+  try {
+    const panelKey = `musicControl_${guildId}`;
+    const panelRec = db.get(panelKey);
+    if (!panelRec || !panelRec.channelId || !panelRec.messageId) {
+      console.warn('No control message found in DB for guild', guildId);
+      return false;
+    }
+    
+    if (!client || !client.channels) {
+      console.warn('No client available to update control message');
+      return false;
+    }
+    
+    const ch = await client.channels.fetch(panelRec.channelId).catch(() => null);
+    if (!ch || !ch.messages) {
+      console.warn('Could not fetch control message channel', panelRec.channelId);
+      return false;
+    }
+    
+    const msg = await ch.messages.fetch(panelRec.messageId).catch(() => null);
+    if (!msg || !msg.edit) {
+      console.warn('Could not fetch control message', panelRec.messageId);
+      return false;
+    }
+    
+    const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+    const embed = new EmbedBuilder().setTitle(content).setColor(0xFF5252);
+    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger));
+    
+    await msg.edit({ embeds: [embed], components: [row] });
+    return true;
+  } catch (e) {
+    console.error('updateControlMessageWithError failed', e && e.message);
+    return false;
+  }
+}
+
 async function findYouTubeUrl(query) {
   if (!query) return null;
   
@@ -746,7 +785,13 @@ async function stop(guild) {
     const conn = getVoiceConnection(guild.id);
     if (conn) conn.destroy();
     state.connection = null;
-    try { const cfg = require('../config'); const announce = cfg.musicLogChannelId || cfg.announceChannelId || '1436487981723680930'; const client = guild.client; if (client && announce) { const ch = await client.channels.fetch(announce).catch(() => null); if (ch) await ch.send(`⏹ Плейер остановлен (сервер: ${guild.name})`); } } catch (e) {}
+    
+    // Update control message with stop status
+    const client = guild.client;
+    updateControlMessageWithError(guild.id, client, '⏹ Плейер остановлен').catch(() => {
+      // Fallback: post to announce channel if control message update failed
+      try { const cfg = require('../config'); const announce = cfg.musicLogChannelId || cfg.announceChannelId || '1436487981723680930'; if (client && announce) { const ch = client.channels.fetch(announce).catch(() => null).then(ch => { if (ch) ch.send(`⏹ Плейер остановлен (сервер: ${guild.name})`); }); } } catch (e) {}
+    });
     return true;
   } catch (e) { console.error('stop error', e); return false; }
 }
@@ -764,6 +809,8 @@ async function changeVolume(guild, delta) { const state = players.get(guild.id);
 async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) {
   try {
     const state = ensureState(guild.id);
+    // Store client for later use (error handlers, etc)
+    state._client = guild.client;
 
     // Owner check: if someone else owns the player, deny interruption
     try {
@@ -864,7 +911,12 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) 
           setTimeout(() => { try { playRadio(guild, voiceChannel, radioStream, textChannel, state.current && state.current.owner ? state.current.owner : null); } catch (e) {} }, 3000);
         } else {
           console.error('playRadio: Max reconnect attempts reached for', url.substring(0, 80));
-          if (textChannel && textChannel.send) textChannel.send('❌ Радиостанция недоступна (повторные ошибки).');
+          // Try to update control message; fallback to text channel send
+          updateControlMessageWithError(guild.id, state._client, '❌ Я запутался повтори запрос.').then(ok => {
+            if (!ok && textChannel && textChannel.send) textChannel.send('❌ Я запутался повтори запрос.');
+          }).catch(() => {
+            if (textChannel && textChannel.send) textChannel.send('❌ Я запутался повтори запрос.');
+          });
         }
         // ensure any abandoned procs are cleaned
         try { _killStateProcs(state); } catch (e) {}

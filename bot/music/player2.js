@@ -246,90 +246,54 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
         attempted.push(candidateUrl);
         const detail = { candidate: candidateUrl, attempts: [] };
 
-        // 1) Try yt-dlp FIRST (most reliable)
-        try {
-          const directUrl = await getStreamFromYtDlp(candidateUrl);
-          if (directUrl) {
-            const stream = await streamFromUrl(directUrl);
-            if (stream) {
-              resource = createAudioResource(stream, { inlineVolume: true });
-              resolvedUrl = candidateUrl;
-              detail.attempts.push({ method: 'yt-dlp', ok: true });
-              attemptDetails.push(detail);
-              break;
-            } else {
-              detail.attempts.push({ method: 'yt-dlp', ok: false, error: 'no stream from direct URL' });
-            }
-          } else {
-            detail.attempts.push({ method: 'yt-dlp', ok: false, error: 'no direct URL' });
-          }
-        } catch (e) { detail.attempts.push({ method: 'yt-dlp', ok: false, error: String(e && e.message || e) }); console.warn('yt-dlp failed for candidate', candidateUrl, e && e.message); lastErr = e; }
-
-        // 2) try play-dl fallback
+        // 1) Try play-dl FIRST (most reliable against YouTube blocking)
         if (!resource && playdl) {
           try {
+            console.log('Attempting play-dl for', candidateUrl.substring(0, 80));
             const pl = await playdl.stream(candidateUrl).catch(() => null);
             if (pl && pl.stream) {
               resource = createAudioResource(pl.stream, { inlineVolume: true });
               resolvedUrl = candidateUrl;
               detail.attempts.push({ method: 'play-dl', ok: true });
               attemptDetails.push(detail);
+              console.log('✅ play-dl SUCCESS for', candidateUrl.substring(0, 80));
               break;
             } else {
-              detail.attempts.push({ method: 'play-dl', ok: false, error: 'no stream' });
+              detail.attempts.push({ method: 'play-dl', ok: false, error: 'no stream returned' });
             }
-          } catch (e) { detail.attempts.push({ method: 'play-dl', ok: false, error: String(e && e.message || e) }); console.warn('play-dl failed for candidate', candidateUrl, e && e.message); lastErr = e; }
+          } catch (e) { 
+            const errMsg = String(e && e.message || e).slice(0, 100);
+            detail.attempts.push({ method: 'play-dl', ok: false, error: errMsg }); 
+            console.warn('play-dl failed for', candidateUrl.substring(0, 80), errMsg); 
+            lastErr = e; 
+          }
         } else if (!resource) {
           detail.attempts.push({ method: 'play-dl', ok: false, error: 'play-dl not installed' });
         }
 
-        // 3) try ytdl-core fallback
-        if (!resource) {
-          try {
-            await ytdl.getInfo(candidateUrl);
-            let stream = null;
-            try { stream = ytdl(candidateUrl, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
-            if (!stream) {
-              try { stream = ytdl(candidateUrl, { filter: 'audioonly', quality: 'lowestaudio', highWaterMark: 1 << 25 }); } catch (e) { stream = null; }
-            }
-            if (stream) {
-              resource = createAudioResource(stream, { inlineVolume: true });
-              resolvedUrl = candidateUrl;
-              detail.attempts.push({ method: 'ytdl-core', ok: true });
-              attemptDetails.push(detail);
-              break;
-            } else {
-              detail.attempts.push({ method: 'ytdl-core', ok: false, error: 'no stream' });
-            }
-          } catch (e) {
-            lastErr = e;
-            detail.attempts.push({ method: 'ytdl-core', ok: false, error: String(e && e.message || e) });
-            console.warn('ytdl failed for candidate', candidateUrl, e && e.message);
-          }
-        }
+        // 2) yt-dlp is DISABLED (YouTube actively blocks it)
+        // Skip yt-dlp entirely
 
-        attemptDetails.push(detail);
+        // 3) ytdl-core is DISABLED as primary (YouTube blocks it)
+        // Skip ytdl-core as it's also blocked
+
+        if (!resource) {
+          attemptDetails.push(detail);
+        } else {
+          break;
+        }
       }
 
       if (!resource) {
-        console.error('All YouTube candidates failed:', attempted, lastErr && (lastErr.stack || lastErr.message || lastErr));
-        // Build diagnostics message (truncate long errors)
-        const lines = [];
-        for (const d of attemptDetails) {
-          const parts = d.attempts.map(a => {
-            if (a.ok) return `${a.method}: ok`;
-            const err = String(a.error || '').slice(0, 200);
-            return `${a.method}: err (${err})`;
-          });
-          lines.push(`• ${d.candidate} -> ${parts.join(' | ')}`);
-        }
-        const diag = lines.join('\n').slice(0, 1800);
-        if (textChannel && textChannel.send) await textChannel.send(`❌ Ошибка при получении аудиопотока с YouTube. Попытки: ${attempted.join(', ')}\n\nДетали:\n${diag}`);
+        console.error('All music candidates failed:', attempted);
+        // Short error message to avoid Discord 2000 char limit
+        const msg = `❌ Ошибка: Не удалось получить аудиопоток. Попробуйте другую песню.`;
+        if (textChannel && textChannel.send) await textChannel.send(msg);
         return false;
       }
     }
 
-    resource.volume.setVolume(state.volume || 1.0);
+    if (resource && resource.volume) resource.volume.setVolume(state.volume || 1.0);
 
     state.player.stop();
     state.player.play(resource);
@@ -420,60 +384,67 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel) {
       connection = joinVoiceChannel({ channelId: voiceChannel.id, guildId: guild.id, adapterCreator: guild.voiceAdapterCreator });
       state.connection = connection;
     }
-    let stream = await streamFromUrl(url);
-    if (!stream) {
-      // try fallback with ffmpeg to force decode
-      try {
-        const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
-        const ff = spawn(ffmpegPath, ['-i', url, '-vn', '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'] });
-        stream = ff.stdout;
-      } catch (e) { stream = null; }
-    }
-    if (!stream) {
-      if (textChannel && textChannel.send) await textChannel.send('❌ Не удалось подключиться к радиостанции.');
+
+    // Always use ffmpeg for radio to ensure proper codec and stability
+    let resource = null;
+    try {
+      const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+      console.log('playRadio: Starting ffmpeg decode for', url.substring(0, 80));
+      
+      const ff = spawn(ffmpegPath, [
+        '-i', url,
+        '-vn',                 // no video
+        '-f', 's16le',         // raw PCM format
+        '-ar', '48000',        // 48kHz sample rate
+        '-ac', '2',            // stereo
+        'pipe:1'               // write to stdout
+      ], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 10 * 1024 * 1024  // 10MB buffer
+      });
+
+      // Log ffmpeg errors
+      ff.stderr.on('data', (data) => {
+        console.warn('ffmpeg stderr:', String(data).slice(0, 200));
+      });
+
+      // Subscribe connection before creating resource
+      connection.subscribe(state.player);
+
+      // Create audio resource from ffmpeg stdout
+      resource = createAudioResource(ff.stdout, { inputType: StreamType.Raw, inlineVolume: true });
+      console.log('playRadio: Audio resource created from ffmpeg stream');
+    } catch (e) {
+      console.error('playRadio: ffmpeg setup failed', e && e.message);
+      if (textChannel && textChannel.send) await textChannel.send(`❌ Ошибка: Не удалось запустить радио.`);
       return false;
     }
 
-    let resource = null;
     try {
-      // subscribe before playing to ensure audio is routed
-      connection.subscribe(state.player);
-      resource = createAudioResource(stream, { inlineVolume: true });
-    } catch (e) {
-      // fallback: if raw stream failed, try forcing ffmpeg decode
-      console.warn('createAudioResource failed, trying ffmpeg fallback', e && e.message);
-      try {
-        const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
-        const ff = spawn(ffmpegPath, ['-i', url, '-vn', '-f', 's16le', '-ar', '48000', '-ac', '2', 'pipe:1'], { stdio: ['ignore', 'pipe', 'pipe'] });
-        resource = createAudioResource(ff.stdout, { inputType: StreamType.Raw, inlineVolume: true });
-      } catch (e2) {
-        console.error('playRadio: createAudioResource fallback failed', e2 && e2.message ? e2.message : e2);
-        if (textChannel && textChannel.send) await textChannel.send(`❌ Ошибка при запуске плеера: ${String(e2 && e2.message || e2).slice(0,200)}`);
-        return false;
-      }
-    }
-
-    try {
-      resource.volume.setVolume(state.volume || 1.0);
-    } catch (e) { /* ignore */ }
+      if (resource && resource.volume) resource.volume.setVolume(state.volume || 1.0);
+    } catch (e) { console.warn('playRadio: volume set failed', e && e.message); }
 
     state.player.stop();
     try {
       state.player.play(resource);
+      console.log('playRadio: Playing radio stream');
     } catch (e) {
-      console.error('playRadio: player.play failed', e && e.message ? e.message : e);
-      if (textChannel && textChannel.send) await textChannel.send(`❌ Ошибка при запуске плеера: ${String(e && e.message || e).slice(0,200)}`);
+      console.error('playRadio: player.play failed', e && e.message);
+      if (textChannel && textChannel.send) await textChannel.send(`❌ Ошибка при запуске плеера.`);
       return false;
     }
+    
     state.playing = true;
     state.current = { url, title: 'Radio Stream' };
+    
     state.player.once(AudioPlayerStatus.Idle, async () => {
       state.playing = false;
       state.current = null;
       setTimeout(() => { const conn = getVoiceConnection(guild.id); if (conn) conn.destroy(); state.connection = null; }, 30_000);
     });
+    
     return true;
-  } catch (e) { console.error('playRadio error', e && e.message ? e.message : e); if (textChannel && textChannel.send) await textChannel.send('❌ Ошибка при воспроизведении радио.'); return false; }
+  } catch (e) { console.error('playRadio error', e && e.message); if (textChannel && textChannel.send) await textChannel.send('❌ Ошибка при воспроизведении радио.'); return false; }
 }
 
 module.exports = { playNow, playRadio, addToQueue, stop, skip, isPlaying, changeVolume };

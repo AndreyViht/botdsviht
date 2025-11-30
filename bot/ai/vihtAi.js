@@ -115,10 +115,43 @@ async function sendPrompt(prompt, opts = {}) {
   let attempt = 0;
   let lastErr = null;
 
+  // Validate and sanitize payload before sending
+  try {
+    // Ensure contents is array with valid structure
+    if (!Array.isArray(payload.contents) || payload.contents.length === 0) {
+      console.error('Invalid payload: contents must be non-empty array');
+      return vihtError();
+    }
+    
+    // Sanitize each message in contents
+    for (let i = 0; i < payload.contents.length; i++) {
+      const item = payload.contents[i];
+      if (!item.role || !item.parts || !Array.isArray(item.parts)) {
+        console.error(`Invalid content item [${i}]: missing role or parts`);
+        return vihtError();
+      }
+      // Ensure parts array has text objects
+      for (let j = 0; j < item.parts.length; j++) {
+        if (!item.parts[j].text) {
+          console.error(`Invalid part [${i}][${j}]: missing text field`);
+          return vihtError();
+        }
+        // Limit individual message length to 4000 chars
+        item.parts[j].text = String(item.parts[j].text).slice(0, 4000);
+      }
+    }
+    
+    // Test JSON serialization
+    JSON.stringify(payload);
+  } catch (e) {
+    console.error('Payload validation failed:', e && e.message);
+    return vihtError();
+  }
+
   while (attempt < maxAttempts) {
     attempt += 1;
     try {
-      const response = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' }, timeout: 90000 });
+      const response = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' }, timeout: 120000 });
       const text = response && response.data && response.data.candidates && response.data.candidates[0] && response.data.candidates[0].content && response.data.candidates[0].content.parts && response.data.candidates[0].content.parts[0] && response.data.candidates[0].content.parts[0].text;
       if (text && String(text).trim().length > 0) {
         let out = sanitizeText(text);

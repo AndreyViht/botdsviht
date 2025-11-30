@@ -425,6 +425,34 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
         }
 
         if (!resource) {
+          // As a last resort try yt-dlp CLI to extract a direct URL and stream that
+          try {
+            console.log('Attempting yt-dlp CLI for', candidateUrl.substring(0, 80));
+            const direct = await getStreamFromYtDlp(candidateUrl).catch(() => null);
+            if (direct) {
+              const s = await streamFromUrl(direct).catch(() => null);
+              if (s) {
+                try {
+                  resource = createAudioResource(s, { inlineVolume: true });
+                  resolvedUrl = direct;
+                  detail.attempts.push({ method: 'yt-dlp-cli', ok: true });
+                  attemptDetails.push(detail);
+                  console.log('✅ yt-dlp CLI SUCCESS for', candidateUrl.substring(0, 80));
+                  break;
+                } catch (e) {
+                  console.warn('yt-dlp createAudioResource failed:', e && e.message);
+                  try { if (s && typeof s.destroy === 'function') s.destroy(); } catch (ee) {}
+                }
+              } else {
+                detail.attempts.push({ method: 'yt-dlp-cli', ok: false, error: 'streamFromUrl failed' });
+              }
+            } else {
+              detail.attempts.push({ method: 'yt-dlp-cli', ok: false, error: 'no url' });
+            }
+          } catch (e) {
+            detail.attempts.push({ method: 'yt-dlp-cli', ok: false, error: String(e && e.message || e).slice(0,100) });
+          }
+
           attemptDetails.push(detail);
         } else {
           break;

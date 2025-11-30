@@ -355,6 +355,8 @@ async function getStreamFromYtDlpPipe(url, state) {
 async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
   try {
     const state = ensureState(guild.id);
+    // Clear the stop flag when starting new playback
+    state._userRequestedStop = false;
 
     // Owner check: if someone else owns the player, deny interruption
     try {
@@ -775,10 +777,15 @@ async function stop(guild) {
   const state = players.get(guild.id);
   if (!state) return false;
   try {
+    // Set a flag to prevent auto-reconnect on ffmpeg exit
+    state._userRequestedStop = true;
+    
     state.player.stop(true);
     state.queue = [];
     state.playing = false;
     state.current = null;
+    state._radioRetries = {}; // Clear any pending retries
+    
     // Kill any child processes/streams associated with this guild
     try { _killStateProcs(state); } catch (e) {}
     await saveQueueForGuild(guild.id);
@@ -811,6 +818,8 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) 
     const state = ensureState(guild.id);
     // Store client for later use (error handlers, etc)
     state._client = guild.client;
+    // Clear the stop flag when starting new playback
+    state._userRequestedStop = false;
 
     // Owner check: if someone else owns the player, deny interruption
     try {
@@ -902,6 +911,12 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) 
       ff.on('exit', (code, signal) => {
         console.warn('ffmpeg exited with code', code, 'signal', signal);
         try { if (state && state.player) { state.player.stop(); state.playing = false; } } catch (e) {}
+
+        // If user explicitly stopped the player, do NOT reconnect
+        if (state._userRequestedStop) {
+          console.log('playRadio: User requested stop, not reconnecting');
+          return;
+        }
 
         state._radioRetries = state._radioRetries || {};
         const key = String(url);

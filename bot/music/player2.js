@@ -364,21 +364,36 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
                 stream = ytdl(candidateUrl, ytdlOpts);
                 
                 if (stream) {
-                  // Attach error handler BEFORE using stream
+                  // Wrap raw ytdl stream into a PassThrough so we can handle async stream errors
+                  const pass = new PassThrough();
+
+                  // Attach error handler BEFORE piping to pass-through
                   stream.on('error', (err) => {
                     streamError = err;
-                    console.warn('ytdl stream async error:', String(err && err.message || err).slice(0, 100));
+                    console.warn('ytdl stream async error:', String(err && err.message || err).slice(0, 200));
+                    try { pass.destroy(err); } catch (e) { /* ignore */ }
+                    // Stop the player gracefully if something goes wrong after play started
+                    try { if (state && state.player) state.player.stop(); } catch (e) { /* ignore */ }
                   });
-                  
+
+                  // Also handle unexpected end/close on the underlying stream
+                  stream.on('close', () => {
+                    console.log('ytdl stream closed for', candidateUrl.substring(0, 80));
+                  });
+
+                  // Pipe into pass-through and create resource from pass
+                  stream.pipe(pass);
+
                   try {
-                    resource = createAudioResource(stream, { inlineVolume: true });
+                    resource = createAudioResource(pass, { inlineVolume: true });
                     resolvedUrl = candidateUrl;
                     detail.attempts.push({ method: 'ytdl-core', ok: true });
                     attemptDetails.push(detail);
                     console.log('✅ ytdl-core SUCCESS for', candidateUrl.substring(0, 80));
                     break;
                   } catch (e) {
-                    console.warn('ytdl-core createAudioResource failed:', String(e && e.message || e).slice(0, 100));
+                    console.warn('ytdl-core createAudioResource failed:', String(e && e.message || e).slice(0, 200));
+                    try { pass.destroy(); } catch (ee) { /* ignore */ }
                     stream = null;
                     // Try next quality option
                     continue;
@@ -565,6 +580,25 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel) {
       
       ff.on('error', (e) => {
         console.error('ffmpeg process error:', e && e.message);
+      });
+
+      // If ffmpeg exits unexpectedly, log and try a single reconnect attempt
+      ff.on('exit', (code, signal) => {
+        console.warn('ffmpeg exited with code', code, 'signal', signal);
+        try {
+          if (state && state.player) {
+            state.player.stop();
+            state.playing = false;
+          }
+        } catch (e) {}
+
+        // Try to restart radio once after short delay
+        setTimeout(() => {
+          try {
+            console.log('playRadio: Attempting single reconnect for', url.substring(0, 80));
+            playRadio(guild, voiceChannel, radioStream, textChannel);
+          } catch (e) { /* ignore */ }
+        }, 3000);
       });
 
       // Create audio resource from ffmpeg stdout

@@ -313,16 +313,36 @@ async function getStreamFromYtDlpPipe(url, state) {
   });
 }
 
-async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
+async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
   try {
     const state = ensureState(guild.id);
-    // ensure previous procs/streams are stopped when starting new playback
+
+    // Owner check: if someone else owns the player, deny interruption
+    try {
+      if (state && state.current && state.current.owner && userId && state.current.owner !== String(userId)) {
+        const owner = state.current.owner;
+        if (textChannel && textChannel.send) await textChannel.send(`❌ Плеер занят пользователем <@${owner}>. Дождитесь завершения или попросите его остановить.`);
+        return false;
+      }
+    } catch (e) { /* ignore */ }
+
+    // allowed to proceed: cleanup previous procs/streams
     try { _killStateProcs(state); } catch (e) {}
+
     const url = await findYouTubeUrl(queryOrUrl);
     if (!url) {
       if (textChannel && textChannel.send) await textChannel.send('❌ Не удалось найти трек по запросу.');
       return false;
     }
+
+    // If another user currently owns the player, deny interruption
+    try {
+      if (state && state.current && state.current.owner && userId && state.current.owner !== String(userId)) {
+        const owner = state.current.owner;
+        if (textChannel && textChannel.send) await textChannel.send(`❌ Плеер занят пользователем <@${owner}>. Дождитесь завершения или попросите его остановить.`);
+        return false;
+      }
+    } catch (e) { /* ignore */ }
 
     let connection = getVoiceConnection(guild.id);
     if (!connection) {
@@ -664,22 +684,19 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
     
     // Use resolvedUrl for display (it's the actual YouTube URL we used)
     const displayUrl = resolvedUrl && typeof resolvedUrl === 'string' ? resolvedUrl : (typeof url === 'string' ? url : 'Музыка');
-    state.current = { url: displayUrl, title: displayUrl };
+    state.current = { url: displayUrl, title: displayUrl, owner: userId ? String(userId) : null, type: 'music' };
 
     state.player.once(AudioPlayerStatus.Idle, async () => {
       state.playing = false;
+      // clear current but keep connection alive until explicit stop
       state.current = null;
       if (state.queue.length > 0) {
         const next = state.queue.shift();
         await saveQueueForGuild(guild.id);
-        playNow(guild, voiceChannel, next.query, textChannel);
-      } else {
-        setTimeout(() => {
-          const conn = getVoiceConnection(guild.id);
-          if (conn) conn.destroy();
-          state.connection = null;
-        }, 30_000);
+        // pass along the guild owner as null for queued items
+        playNow(guild, voiceChannel, next.query, textChannel, userId);
       }
+      // do NOT destroy voice connection here; keep it connected until stop() is called
     });
 
     try {
@@ -738,9 +755,26 @@ function isPlaying(guild) { const state = players.get(guild.id); return state &&
 
 async function changeVolume(guild, delta) { const state = players.get(guild.id); if (!state) return null; state.volume = Math.max(0.01, Math.min(5.0, (state.volume || 1.0) + delta)); try { await saveQueueForGuild(guild.id); return state.volume; } catch (e) { return state.volume; } }
 
-async function playRadio(guild, voiceChannel, radioStream, textChannel) {
+async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) {
   try {
     const state = ensureState(guild.id);
+
+    // Owner check: if someone else owns the player, deny interruption
+    try {
+      if (state && state.current && state.current.owner && userId && state.current.owner !== String(userId)) {
+        const owner = state.current.owner;
+        if (textChannel && textChannel.send) await textChannel.send(`❌ Плеер занят пользователем <@${owner}>. Дождитесь завершения или попросите его остановить.`);
+        return false;
+      }
+    } catch (e) { /* ignore */ }
+
+    // allowed to proceed: cleanup previous procs/streams
+    try { _killStateProcs(state); } catch (e) {}
+    // If another user currently owns the player, deny interruption
+    const callerId = (textChannel && textChannel.client && textChannel.client.user) ? null : null;
+    try {
+      // radio owner check will be handled via radio play invocation (pass userId there if needed)
+    } catch (e) {}
     const { url } = radioStream;
     if (!url) {
       if (textChannel && textChannel.send) await textChannel.send('❌ Неверный URL радиостанции.');
@@ -821,7 +855,7 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel) {
         state._radioRetries[key] = (state._radioRetries[key] || 0) + 1;
         const maxRetries = 2;
         if (state._radioRetries[key] <= maxRetries) {
-          setTimeout(() => { try { playRadio(guild, voiceChannel, radioStream, textChannel); } catch (e) {} }, 3000);
+          setTimeout(() => { try { playRadio(guild, voiceChannel, radioStream, textChannel, state.current && state.current.owner ? state.current.owner : null); } catch (e) {} }, 3000);
         } else {
           console.error('playRadio: Max reconnect attempts reached for', url.substring(0, 80));
           if (textChannel && textChannel.send) textChannel.send('❌ Радиостанция недоступна (повторные ошибки).');
@@ -854,12 +888,12 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel) {
     }
     
     state.playing = true;
-    state.current = { url, title: 'Radio Stream' };
+    state.current = { url, title: 'Radio Stream', owner: userId ? String(userId) : null, type: 'radio' };
     
     state.player.once(AudioPlayerStatus.Idle, async () => {
       state.playing = false;
       state.current = null;
-      setTimeout(() => { const conn = getVoiceConnection(guild.id); if (conn) conn.destroy(); state.connection = null; }, 30_000);
+      // keep voice connection alive; radio may be restarted later or explicitly stopped
     });
     
     return true;

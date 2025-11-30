@@ -82,7 +82,7 @@ async function handleMusicButton(interaction) {
       try {
         // Play radio stream directly (bypass YouTube search)
         const radioStream = { url: radio.url };
-        const ok = await musicPlayer.playRadio(guild, voiceChannel, radioStream, interaction.channel);
+        const ok = await musicPlayer.playRadio(guild, voiceChannel, radioStream, interaction.channel, user.id);
         if (!ok) {
           return await interaction.editReply({ content: '❌ Не удалось подключиться к радиостанции.', flags: 64 });
         }

@@ -211,7 +211,7 @@ client.on('interactionCreate', async (interaction) => {
           const voiceChannel = member && member.voice ? member.voice.channel : null;
           if (!voiceChannel) return await safeReply(interaction, { content: 'Вы не в голосовом канале.', ephemeral: true });
           await safeReply(interaction, { content: '🔎 Ищу и начинаю воспроизведение...', ephemeral: true });
-          await musicPlayer.playNow(guild, voiceChannel, query, interaction.channel).catch(async (e) => { console.error('playNow error', e); await safeReply(interaction, { content: 'Ошибка при воспроизведении трека.', ephemeral: true }); });
+          await musicPlayer.playNow(guild, voiceChannel, query, interaction.channel, interaction.user.id).catch(async (e) => { console.error('playNow error', e); await safeReply(interaction, { content: 'Ошибка при воспроизведении трека.', ephemeral: true }); });
           return;
         } catch (e) { console.error('music_modal submit error', e); return await safeReply(interaction, { content: 'Ошибка при обработке формы музыки.', ephemeral: true }); }
       }
@@ -236,7 +236,7 @@ client.on('interactionCreate', async (interaction) => {
           const voiceChannel = member && member.voice ? member.voice.channel : null;
           if (!voiceChannel) return await safeReply(interaction, { content: '❌ Вы не в голосовом канале.', ephemeral: true });
           await safeReply(interaction, { content: `🔎 Ищу песню "${songName}"...`, ephemeral: true });
-          await musicPlayer.playNow(guild, voiceChannel, songName, interaction.channel).catch(async (e) => { console.error('custom music search error', e); await safeReply(interaction, { content: 'Не удалось найти и воспроизвести песню.', ephemeral: true }); });
+          await musicPlayer.playNow(guild, voiceChannel, songName, interaction.channel, interaction.user.id).catch(async (e) => { console.error('custom music search error', e); await safeReply(interaction, { content: 'Не удалось найти и воспроизвести песню.', ephemeral: true }); });
           return;
         } catch (e) { console.error('music_search_modal submit error', e); return await safeReply(interaction, { content: 'Ошибка при поиске песни.', ephemeral: true }); }
       }

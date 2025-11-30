@@ -38,10 +38,10 @@ npm ci
 npm run register-commands
 ```
 
-4. Тестовый запуск:
+4. На сервере: убедитесь, что `.env` содержит необходимые переменные, затем:
 
 ```powershell
-DISCORD_TOKEN="..." GEMINI_API_KEY="..." npm start
+npm start
 ```
 
 Где взять ID и токены
@@ -66,8 +66,6 @@ GitHub Actions не предназначены для хостинга долг�
 ```bash
 cd /path/to/repo
 npm ci
-# тест
-DISCORD_TOKEN="..." GEMINI_API_KEY="..." npm start
 
 # PM2
 npm i -g pm2

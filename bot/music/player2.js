@@ -214,7 +214,7 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
         // direct non-YouTube URL: try to stream it directly
         const stream = await streamFromUrl(url);
         if (!stream) { if (textChannel && textChannel.send) await textChannel.send('❌ Не удалось открыть поток.'); return false; }
-        resource = createAudioResource(stream, { inlineVolume: true });
+        resource = createAudioResource(stream, { inputType: StreamType.WebmOpus, inlineVolume: true }).catch(() => createAudioResource(stream, { inlineVolume: true }));
         resolvedUrl = url;
       }
     } else if (url && Array.isArray(url.candidates)) {

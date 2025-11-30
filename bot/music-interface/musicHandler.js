@@ -178,9 +178,64 @@ async function handleMusicButton(interaction) {
       return;
     }
 
-    // Coming soon messages
+    // Custom music - show search and queue options
     if (customId === 'music_own') {
-      await interaction.reply({ content: '🔨 **Своя музыка** - в разработке', flags: 64 });
+      await interaction.deferReply({ flags: 64 });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('🎵 Своя музыка')
+        .setColor(0x7289DA)
+        .setDescription('Воспроизведение музыки по названию. Поиск в интернете и добавление в очередь.');
+      
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('music_custom_search').setLabel('🔎 Найти и играть').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('music_custom_queue').setLabel('➕ Добавить в очередь').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('music_menu').setLabel('← В меню').setStyle(ButtonStyle.Danger)
+      );
+
+      await interaction.editReply({ embeds: [embed], components: [row] });
+      return;
+    }
+
+    // Search and play custom music
+    if (customId === 'music_custom_search') {
+      const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder: ModalRowBuilder } = require('discord.js');
+      
+      const modal = new ModalBuilder()
+        .setCustomId('music_search_modal')
+        .setTitle('🔎 Найти песню');
+      
+      const songInput = new TextInputBuilder()
+        .setCustomId('song_name')
+        .setLabel('Название песни (исполнитель)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(200);
+      
+      modal.addComponents(new ModalRowBuilder().addComponents(songInput));
+      
+      await interaction.showModal(modal);
+      return;
+    }
+
+    // Add to queue
+    if (customId === 'music_custom_queue') {
+      const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder: ModalRowBuilder } = require('discord.js');
+      
+      const modal = new ModalBuilder()
+        .setCustomId('music_queue_modal')
+        .setTitle('➕ Добавить в очередь');
+      
+      const songInput = new TextInputBuilder()
+        .setCustomId('song_name_queue')
+        .setLabel('Название песни (исполнитель)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(200);
+      
+      modal.addComponents(new ModalRowBuilder().addComponents(songInput));
+      
+      await interaction.showModal(modal);
       return;
     }
 

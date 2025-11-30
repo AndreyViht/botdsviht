@@ -87,6 +87,16 @@ async function findYouTubeUrl(query) {
     
     // Fallback to any video results if still empty
     if (!vids.length && r && r.videos && r.videos.length) vids = r.videos;
+
+    // If still nothing and play-dl is available, try play-dl search as a fallback
+    if (!vids.length && playdl) {
+      try {
+        const pls = await playdl.search(searchQuery, { limit: 6 }).catch(() => null);
+        if (pls && Array.isArray(pls) && pls.length) {
+          vids = pls.map(p => ({ url: p.url || (p.id ? `https://www.youtube.com/watch?v=${p.id}` : null), title: p.title || p.name }));
+        }
+      } catch (e) { /* ignore */ }
+    }
     
     const candidates = vids.map(v => ({ url: v.url, title: v.title }));
     return candidates.length ? { candidates } : null;
@@ -214,7 +224,11 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
         // direct non-YouTube URL: try to stream it directly
         const stream = await streamFromUrl(url);
         if (!stream) { if (textChannel && textChannel.send) await textChannel.send('❌ Не удалось открыть поток.'); return false; }
-        resource = createAudioResource(stream, { inputType: StreamType.WebmOpus, inlineVolume: true }).catch(() => createAudioResource(stream, { inlineVolume: true }));
+        try {
+          resource = createAudioResource(stream, { inputType: StreamType.WebmOpus, inlineVolume: true });
+        } catch (err) {
+          resource = createAudioResource(stream, { inlineVolume: true });
+        }
         resolvedUrl = url;
       }
     } else if (url && Array.isArray(url.candidates)) {

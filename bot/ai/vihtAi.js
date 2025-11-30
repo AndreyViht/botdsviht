@@ -118,9 +118,10 @@ async function sendPrompt(prompt, opts = {}) {
   while (attempt < maxAttempts) {
     attempt += 1;
     try {
-      const response = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' }, timeout: 60000 });
-      if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        let out = sanitizeText(response.data.candidates[0].content.parts[0].text);
+      const response = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' }, timeout: 90000 });
+      const text = response && response.data && response.data.candidates && response.data.candidates[0] && response.data.candidates[0].content && response.data.candidates[0].content.parts && response.data.candidates[0].content.parts[0] && response.data.candidates[0].content.parts[0].text;
+      if (text && String(text).trim().length > 0) {
+        let out = sanitizeText(text);
         if (out.length > 1800) out = out.slice(0, 1800).trim();
         
         // Store in history for context
@@ -133,14 +134,13 @@ async function sendPrompt(prompt, opts = {}) {
       return vihtError();
     } catch (e) {
       lastErr = e;
-      const status = e?.response?.status;
-      console.warn(`AI request attempt ${attempt} failed`, status || e.code || e.message);
-      if ((status && status >= 500 && status < 600) || !status) {
-        if (attempt < maxAttempts) {
-          const delay = Math.pow(2, attempt) * 500;
-          await new Promise(r => setTimeout(r, delay));
-          continue;
-        }
+      const status = e && e.response && e.response.status;
+      console.warn('AI request attempt', attempt, 'failed', status || e.code || e.message);
+      const shouldRetry = (!status) || status === 429 || (status >= 500 && status < 600);
+      if (shouldRetry && attempt < maxAttempts) {
+        const delay = Math.pow(2, attempt) * 500 + Math.floor(Math.random() * 500);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
       }
       break;
     }

@@ -252,7 +252,31 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel) {
             console.log('Attempting play-dl for', candidateUrl.substring(0, 80));
             let pl = null;
             try {
-              pl = await playdl.stream(candidateUrl);
+              // play-dl sometimes prefers shorthand URL format
+              let urlToTry = candidateUrl;
+              
+              // Extract video ID from long URLs and try shorthand format too
+              const vidMatch = candidateUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+              if (vidMatch && vidMatch[1]) {
+                // Try shorthand first
+                const shortUrl = `https://youtu.be/${vidMatch[1]}`;
+                try {
+                  pl = await playdl.stream(shortUrl).catch(() => null);
+                } catch (e) {
+                  pl = null;
+                }
+                
+                // Fall back to full URL if short didn't work
+                if (!pl) {
+                  try {
+                    pl = await playdl.stream(candidateUrl).catch(() => null);
+                  } catch (e) {
+                    pl = null;
+                  }
+                }
+              } else {
+                pl = await playdl.stream(candidateUrl).catch(() => null);
+              }
             } catch (e) {
               console.warn('play-dl.stream() threw:', String(e && e.message || e).slice(0, 150));
               pl = null;

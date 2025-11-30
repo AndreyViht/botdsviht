@@ -12,6 +12,73 @@ const radios = JSON.parse(fs.readFileSync(radiosPath, 'utf-8'));
 const activeRadios = new Map();
 const db = require('../libs/db');
 
+// Helpers for storing control message + owner
+async function _getControlRecForGuild(guildId) {
+  try {
+    const key = `musicControl_${guildId}`;
+    return db.get(key) || null;
+  } catch (e) { return null; }
+}
+
+async function _saveControlMessageForGuild(guildId, channelId, messageId, owner = null) {
+  try {
+    const key = `musicControl_${guildId}`;
+    const existing = db.get(key) || {};
+    const rec = { channelId, messageId };
+    if (existing && existing.owner) rec.owner = existing.owner;
+    if (owner) rec.owner = owner;
+    await db.set(key, rec);
+  } catch (e) { console.error('Failed to save control message to DB', e); }
+}
+
+async function _setMusicOwner(guildId, ownerId) {
+  try {
+    const key = `musicControl_${guildId}`;
+    const existing = db.get(key) || {};
+    existing.owner = ownerId ? String(ownerId) : null;
+    await db.set(key, existing);
+  } catch (e) { console.error('Failed to set music owner in DB', e); }
+}
+
+async function _clearMusicOwner(guildId) {
+  try {
+    const key = `musicControl_${guildId}`;
+    const existing = db.get(key) || {};
+    delete existing.owner;
+    await db.set(key, existing);
+  } catch (e) { console.error('Failed to clear music owner in DB', e); }
+}
+
+// Ensure there is a music control message for the guild/channel with a single register button
+async function ensureMusicControlPanel(channel) {
+  try {
+    if (!channel || !channel.guild) return;
+    const guildId = channel.guild.id;
+    const key = `musicControl_${guildId}`;
+    const rec = db.get(key);
+    const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+    const embed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы начать пользоваться ботом (первый нажимает — становится владельцем плеера).');
+    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary));
+    if (!rec || !rec.channelId || !rec.messageId) {
+      const posted = await channel.send({ embeds: [embed], components: [row] }).catch(() => null);
+      if (posted) await db.set(key, { channelId: channel.id, messageId: posted.id }).catch(()=>{});
+      return;
+    }
+    // Try to fetch and update existing message; if missing, repost
+    const ch = channel;
+    const msg = await ch.messages.fetch(rec.messageId).catch(() => null);
+    if (!msg) {
+      const posted = await ch.send({ embeds: [embed], components: [row] }).catch(() => null);
+      if (posted) await db.set(key, { channelId: channel.id, messageId: posted.id }).catch(()=>{});
+    } else {
+      // If an owner exists, keep message as-is (owner manages it); otherwise ensure it shows register button
+      if (!rec.owner) {
+        await msg.edit({ embeds: [embed], components: [row] }).catch(()=>{});
+      }
+    }
+  } catch (e) { console.error('ensureMusicControlPanel error', e); }
+}
+
 async function _saveControlMessageForGuild(guildId, channelId, messageId) {
   try {
     const key = `musicControl_${guildId}`;
@@ -21,10 +88,23 @@ async function _saveControlMessageForGuild(guildId, channelId, messageId) {
 
 async function handleMusicButton(interaction) {
   const { customId, user, member, guild, client } = interaction;
-
+  // Load control record and determine owner (if any) for this guild
+  let panelRec = null;
+  try { panelRec = guild && guild.id ? (db.get(`musicControl_${guild.id}`) || null) : null; } catch (e) { panelRec = null; }
+  const ownerId = panelRec && panelRec.owner ? String(panelRec.owner) : null;
   try {
     // Main music menu - show options
     if (customId === 'music_menu') {
+      // Enforce registration/ownership: if there is an owner and caller is not owner, deny
+      if (ownerId && ownerId !== String(user.id)) {
+        try { await interaction.reply({ content: '❌ БОТ аудио занят другим пользователем', ephemeral: true }); } catch (e) { /* ignore */ }
+        return;
+      }
+      // If no owner yet, instruct to press register instead
+      if (!ownerId) {
+        try { await interaction.reply({ content: '🔒 Плеер свободен. Нажмите «Начать пользоваться» в панели управления, чтобы получить доступ.', ephemeral: true }); } catch (e) {}
+        return;
+      }
       // Update the existing control message instead of sending new replies
       const embed = createMusicMenuEmbed();
       const row = new ActionRowBuilder().addComponents(
@@ -33,7 +113,7 @@ async function handleMusicButton(interaction) {
         new ButtonBuilder().setCustomId('music_link').setLabel('🔗 Ссылка').setStyle(ButtonStyle.Secondary).setDisabled(true),
         new ButtonBuilder().setCustomId('music_back').setLabel('← Назад').setStyle(ButtonStyle.Danger)
       );
-      try { 
+        try { 
         await interaction.update({ embeds: [embed], components: [row] }); 
         if (guild && guild.id && interaction.message && interaction.message.id) {
           await _saveControlMessageForGuild(guild.id, interaction.channel.id, interaction.message.id);
@@ -43,6 +123,79 @@ async function handleMusicButton(interaction) {
         if (guild && guild.id && interaction.message && interaction.message.id) {
           await _saveControlMessageForGuild(guild.id, interaction.channel.id, interaction.message.id).catch(()=>{});
         }
+      }
+      return;
+    }
+
+    // Registration: first user to press becomes owner
+    if (customId === 'music_register') {
+      try {
+        if (!guild) return await interaction.reply({ content: '❌ Ошибка: не удалось определить сервер.', ephemeral: true });
+        const rec = await _getControlRecForGuild(guild.id);
+        if (rec && rec.owner) {
+          return await interaction.reply({ content: '❌ Плеер уже занят другим пользователем.', ephemeral: true });
+        }
+        // Set owner and show music menu to owner by editing the control message
+        await _setMusicOwner(guild.id, user.id);
+        // Update control message to owner view (music menu)
+        const embed = createMusicMenuEmbed();
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('music_radio').setLabel('📻 Радио').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('music_own').setLabel('🎵 Своя музыка').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId('music_link').setLabel('🔗 Ссылка').setStyle(ButtonStyle.Secondary).setDisabled(true),
+          new ButtonBuilder().setCustomId('music_back').setLabel('← Назад').setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId('music_release').setLabel('Остановить бота').setStyle(ButtonStyle.Danger)
+        );
+        // Edit stored control message if present
+        if (rec && rec.channelId && rec.messageId) {
+          try {
+            const ch = await client.channels.fetch(rec.channelId).catch(() => null);
+            if (ch && ch.messages) {
+              const msg = await ch.messages.fetch(rec.messageId).catch(() => null);
+              if (msg) {
+                await msg.edit({ embeds: [embed], components: [row] }).catch(() => null);
+                await _saveControlMessageForGuild(guild.id, rec.channelId, rec.messageId, user.id).catch(() => null);
+                return await interaction.reply({ content: '✅ Вы зарегистрированы как владелец аудио. Управление доступно.', ephemeral: true });
+              }
+            }
+          } catch (e) { /* ignore */ }
+        }
+        // Fallback: reply that registration succeeded but control message couldn't be updated
+        return await interaction.reply({ content: '✅ Вы зарегистрированы как владелец аудио. Но не удалось обновить панель (возможно сообщение удалено).', ephemeral: true });
+      } catch (e) {
+        console.error('music_register error', e);
+        try { await interaction.reply({ content: '❌ Ошибка регистрации.', ephemeral: true }); } catch (e2) {}
+      }
+      return;
+    }
+
+    // Release ownership / stop bot (only owner)
+    if (customId === 'music_release') {
+      try {
+        if (!guild) return await interaction.reply({ content: '❌ Ошибка: не удалось определить сервер.', ephemeral: true });
+        const rec = await _getControlRecForGuild(guild.id);
+        const owner = rec && rec.owner ? String(rec.owner) : null;
+        if (!owner || owner !== String(user.id)) return await interaction.reply({ content: '❌ Только владелец может остановить бота.', ephemeral: true });
+        // Stop playback and clear owner
+        try { await musicPlayer.stop(guild); } catch (e) { console.warn('music_release: stop failed', e); }
+        await _clearMusicOwner(guild.id);
+        // Update control message back to initial register view
+        if (rec && rec.channelId && rec.messageId) {
+          const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+          const embed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы начать пользоваться ботом (первый нажимает — становится владельцем плеера).');
+          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary));
+          try {
+            const ch = await client.channels.fetch(rec.channelId).catch(() => null);
+            if (ch && ch.messages) {
+              const msg = await ch.messages.fetch(rec.messageId).catch(() => null);
+              if (msg) await msg.edit({ embeds: [embed], components: [row] }).catch(() => null);
+            }
+          } catch (e) { /* ignore */ }
+        }
+        return await interaction.reply({ content: '⏹️ Вы остановили бота и освободили доступ.', ephemeral: true });
+      } catch (e) {
+        console.error('music_release error', e);
+        try { await interaction.reply({ content: '❌ Ошибка при остановке.', ephemeral: true }); } catch (e2) {}
       }
       return;
     }
@@ -295,5 +448,7 @@ function getMusicButtonHandler() {
 
 module.exports = {
   getMusicButtonHandler,
-  handleMusicButton
+  handleMusicButton,
+  ensureMusicControlPanel
 };
+

@@ -92,7 +92,7 @@ if (fs.existsSync(commandsPath)) {
 const db = require('./libs/db');
 const { sendPrompt } = require('./ai/vihtAi');
 const musicPlayer = require('./music/player2');
-const { handleMusicButton } = require('./music-interface/musicHandler');
+const { handleMusicButton, ensureMusicControlPanel } = require('./music-interface/musicHandler');
 const { handleControlPanelButton } = require('./music-interface/controlPanelHandler');
 const { handlePriceButton } = require('./price/priceHandler');
 // optional helpers
@@ -565,6 +565,8 @@ client.once('ready', async () => {
         await db.set(panelCheckKey, { channelId: CONTROL_PANEL_CHANNEL_ID, messageId: msg.id, postedAt: Date.now() });
       }
       console.log('Posted control panel to', CONTROL_PANEL_CHANNEL_ID);
+      // Ensure music-specific control panel (register button) exists in same channel
+      try { await ensureMusicControlPanel(controlChannel); } catch (e) { console.warn('ensureMusicControlPanel failed', e && e.message); }
     } else {
       // Update existing panel
       const existing = await controlChannel.messages.fetch(panelCheck.messageId).catch(() => null);
@@ -578,6 +580,7 @@ client.once('ready', async () => {
           await db.set(panelCheckKey, { channelId: CONTROL_PANEL_CHANNEL_ID, messageId: msg.id, postedAt: Date.now() });
         }
         console.log('Reposted control panel to', CONTROL_PANEL_CHANNEL_ID);
+        try { await ensureMusicControlPanel(controlChannel); } catch (e) { console.warn('ensureMusicControlPanel failed', e && e.message); }
       }
     }
     // Periodic assurance: ensure the control panel message remains present. Run every 5 minutes.

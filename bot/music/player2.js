@@ -123,6 +123,22 @@ async function updateControlMessageWithError(guildId, client, content) {
     const msg = await ch.messages.fetch(panelRec.messageId).catch(() => null);
     if (!msg || !msg.edit) {
       console.warn('Could not fetch control message', panelRec.messageId);
+      // Message probably deleted -> recreate a replacement control message and persist
+      try {
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+        const embed = new EmbedBuilder().setTitle(content).setColor(0xFF5252);
+        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger));
+        const posted = await ch.send({ embeds: [embed], components: [row] }).catch(() => null);
+        if (posted) {
+          // preserve existing owner if present
+          const rec = { channelId: panelRec.channelId, messageId: posted.id };
+          if (panelRec.owner) rec.owner = panelRec.owner;
+          await db.set(panelKey, rec).catch(() => {});
+          return true;
+        }
+      } catch (e) {
+        console.warn('Failed to recreate control message after missing', e && e.message);
+      }
       return false;
     }
     
@@ -362,7 +378,11 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
     try {
       if (state && state.current && state.current.owner && userId && state.current.owner !== String(userId)) {
         const owner = state.current.owner;
-        if (textChannel && textChannel.send) await textChannel.send(`❌ Плеер занят пользователем <@${owner}>. Дождитесь завершения или попросите его остановить.`);
+        const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+        const msgText = `❌ Плеер занят пользователем <@${owner}>. Дождитесь завершения или попросите его остановить.`;
+        let updated = false;
+        if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(() => false);
+        if (!updated && textChannel && textChannel.send) await textChannel.send(msgText);
         return false;
       }
     } catch (e) { /* ignore */ }
@@ -372,7 +392,11 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
 
     const url = await findYouTubeUrl(queryOrUrl);
     if (!url) {
-      if (textChannel && textChannel.send) await textChannel.send('❌ Не удалось найти трек по запросу.');
+      const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+      const msgText = '❌ Не удалось найти трек по запросу.';
+      let updated = false;
+      if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(() => false);
+      if (!updated && textChannel && textChannel.send) await textChannel.send(msgText);
       return false;
     }
 
@@ -380,7 +404,11 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
     try {
       if (state && state.current && state.current.owner && userId && state.current.owner !== String(userId)) {
         const owner = state.current.owner;
-        if (textChannel && textChannel.send) await textChannel.send(`❌ Плеер занят пользователем <@${owner}>. Дождитесь завершения или попросите его остановить.`);
+        const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+        const msgText = `❌ Плеер занят пользователем <@${owner}>. Дождитесь завершения или попросите его остановить.`;
+        let updated = false;
+        if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(() => false);
+        if (!updated && textChannel && textChannel.send) await textChannel.send(msgText);
         return false;
       }
     } catch (e) { /* ignore */ }
@@ -396,7 +424,13 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
         console.log('playNow: Voice connection is Ready, guild', guild.id);
       } catch (e) {
         console.warn('playNow: connection not ready', e && e.message);
-        if (textChannel && textChannel.send) await textChannel.send('❌ Ошибка подключения к голосовому каналу.');
+        {
+          const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+          const msgText = '❌ Ошибка подключения к голосовому каналу.';
+          let updated = false;
+          if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(() => false);
+          if (!updated && textChannel && textChannel.send) await textChannel.send(msgText);
+        }
         return false;
       }
     } else {
@@ -422,7 +456,7 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
       else {
         // direct non-YouTube URL: try to stream it directly
         const stream = await streamFromUrl(url);
-        if (!stream) { if (textChannel && textChannel.send) await textChannel.send('❌ Не удалось открыть поток.'); return false; }
+        if (!stream) { const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null); const msgText = '❌ Не удалось открыть поток.'; let updated = false; if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(()=>false); if (!updated && textChannel && textChannel.send) await textChannel.send(msgText); return false; }
         try {
           resource = createAudioResource(stream, { inputType: StreamType.WebmOpus, inlineVolume: true });
         } catch (err) {
@@ -712,7 +746,12 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
         console.error('All music candidates failed:', attempted);
         // Short error message to avoid Discord 2000 char limit
         const msg = `❌ Ошибка: Не удалось получить аудиопоток. Попробуйте другую песню.`;
-        if (textChannel && textChannel.send) await textChannel.send(msg);
+        if (textChannel && textChannel.send) {
+          const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+          let updated = false;
+          if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msg).catch(() => false);
+          if (!updated) await textChannel.send(msg);
+        }
         return false;
       }
     }
@@ -724,7 +763,11 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
       state.player.play(resource);
     } catch (e) {
       console.error('playNow: player.play() failed:', e && e.message);
-      if (textChannel && textChannel.send) await textChannel.send('❌ Ошибка при запуске плеера.');
+      const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+      const msgText = '❌ Ошибка при запуске плеера.';
+      let updated = false;
+      if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(() => false);
+      if (!updated && textChannel && textChannel.send) await textChannel.send(msgText);
       return false;
     }
     state.playing = true;
@@ -747,7 +790,11 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
     });
 
     try {
-      if (textChannel && textChannel.send) await textChannel.send(`▶️ Запущен: ${displayUrl}`);
+      const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+      const okMsg = `▶️ Запущен: ${displayUrl}`;
+      let updated = false;
+      if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, okMsg).catch(() => false);
+      if (!updated && textChannel && textChannel.send) await textChannel.send(okMsg);
       const cfg = require('../config');
       const announce = cfg.musicLogChannelId || cfg.announceChannelId || '1436487981723680930';
       const client = guild.client || (voiceChannel && voiceChannel.guild && voiceChannel.guild.client);
@@ -825,7 +872,11 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) 
     try {
       if (state && state.current && state.current.owner && userId && state.current.owner !== String(userId)) {
         const owner = state.current.owner;
-        if (textChannel && textChannel.send) await textChannel.send(`❌ Плеер занят пользователем <@${owner}>. Дождитесь завершения или попросите его остановить.`);
+        const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+        const msgText = `❌ Плеер занят пользователем <@${owner}>. Дождитесь завершения или попросите его остановить.`;
+        let updated = false;
+        if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(() => false);
+        if (!updated && textChannel && textChannel.send) await textChannel.send(msgText);
         return false;
       }
     } catch (e) { /* ignore */ }
@@ -839,7 +890,11 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) 
     } catch (e) {}
     const { url } = radioStream;
     if (!url) {
-      if (textChannel && textChannel.send) await textChannel.send('❌ Неверный URL радиостанции.');
+      const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+      const msgText = '❌ Неверный URL радиостанции.';
+      let updated = false;
+      if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(() => false);
+      if (!updated && textChannel && textChannel.send) await textChannel.send(msgText);
       return false;
     }
     
@@ -856,7 +911,13 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) 
         console.log('playRadio: Voice connection is Ready');
       } catch (e) {
         console.error('playRadio: Connection never became Ready:', e && e.message);
-        if (textChannel && textChannel.send) await textChannel.send('❌ Ошибка подключения к голосовому каналу.');
+        {
+          const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+          const msgText = '❌ Ошибка подключения к голосовому каналу.';
+          let updated = false;
+          if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(() => false);
+          if (!updated && textChannel && textChannel.send) await textChannel.send(msgText);
+        }
         return false;
       }
     } else {
@@ -942,7 +1003,11 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) 
       console.log('playRadio: Audio resource created from ffmpeg stream');
     } catch (e) {
       console.error('playRadio: ffmpeg setup failed', e && e.message);
-      if (textChannel && textChannel.send) await textChannel.send(`❌ Ошибка: Не удалось запустить радио.`);
+      const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+      const msgText = `❌ Ошибка: Не удалось запустить радио.`;
+      let updated = false;
+      if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(() => false);
+      if (!updated && textChannel && textChannel.send) await textChannel.send(msgText);
       return false;
     }
 
@@ -956,7 +1021,11 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) 
       console.log('playRadio: Playing radio stream');
     } catch (e) {
       console.error('playRadio: player.play failed', e && e.message);
-      if (textChannel && textChannel.send) await textChannel.send(`❌ Ошибка при запуске плеера.`);
+      const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+      const msgText = `❌ Ошибка при запуске плеера.`;
+      let updated = false;
+      if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(() => false);
+      if (!updated && textChannel && textChannel.send) await textChannel.send(msgText);
       return false;
     }
     

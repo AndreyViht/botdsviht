@@ -87,14 +87,39 @@ async function sendPrompt(prompt, opts = {}) {
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   
-  // Build conversation with history
-  const contents = [...userHistory, { role: 'user', parts: [{ text: String(prompt) }] }];
+  // Build conversation with history - STRICT VALIDATION
+  const contents = [];
+  
+  // Add history messages
+  for (const h of userHistory) {
+    if (h && h.role && h.content) {
+      const content = String(h.content || '').slice(0, 4000).trim();
+      if (content.length > 0) {
+        contents.push({
+          role: h.role,
+          parts: [{ text: content }]
+        });
+      }
+    }
+  }
+  
+  // Add current user prompt
+  const promptText = String(prompt || '').slice(0, 4000).trim();
+  if (promptText.length > 0) {
+    contents.push({
+      role: 'user',
+      parts: [{ text: promptText }]
+    });
+  }
+  
+  // Validate we have at least the current prompt
+  if (contents.length === 0) {
+    console.error('No valid content to send');
+    return vihtError();
+  }
   
   const payload = {
-    contents: contents.map(c => ({
-      role: c.role,
-      parts: Array.isArray(c.parts) ? c.parts : [{ text: c.content || '' }]
-    })),
+    contents: contents,
     systemInstruction: {
       parts: [{ text: `Ты — Viht, виртуальный помощник проекта Viht. Ты помощник для подключения и работы с VPN Viht, а также искусственный помощник в общении, информации, кодинге, разборе идей и размышлении над темами.
 
@@ -143,6 +168,7 @@ async function sendPrompt(prompt, opts = {}) {
     
     // Test JSON serialization
     JSON.stringify(payload);
+    console.log('Payload validated. Contents count:', payload.contents.length);
   } catch (e) {
     console.error('Payload validation failed:', e && e.message);
     return vihtError();
@@ -168,7 +194,19 @@ async function sendPrompt(prompt, opts = {}) {
     } catch (e) {
       lastErr = e;
       const status = e && e.response && e.response.status;
-      console.warn('AI request attempt', attempt, 'failed', status || e.code || e.message);
+      const responseData = e && e.response && e.response.data ? JSON.stringify(e.response.data).slice(0, 300) : '';
+      console.warn(`AI request attempt ${attempt} failed ${status || e.code || e.message}. Response: ${responseData}`);
+      
+      if (status === 400) {
+        // Log payload for debugging 400 errors
+        console.error('400 Error - Payload details:');
+        console.error('  Contents count:', payload.contents.length);
+        for (let i = 0; i < Math.min(2, payload.contents.length); i++) {
+          const item = payload.contents[i];
+          console.error(`  Content[${i}]: role=${item.role}, parts=${item.parts.length}, text_length=${item.parts[0].text.length}`);
+        }
+      }
+      
       const shouldRetry = (!status) || status === 429 || (status >= 500 && status < 600);
       if (shouldRetry && attempt < maxAttempts) {
         const delay = Math.pow(2, attempt) * 500 + Math.floor(Math.random() * 500);

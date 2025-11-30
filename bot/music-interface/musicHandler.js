@@ -124,8 +124,18 @@ async function handleMusicButton(interaction) {
           new ButtonBuilder().setCustomId('music_back').setLabel('← Назад').setStyle(ButtonStyle.Danger),
           new ButtonBuilder().setCustomId('music_release').setLabel('Остановить бота').setStyle(ButtonStyle.Danger)
         );
-        // Update main control message
-        const updated = await _updateMainControlMessage(guild.id, client, [embed], [row]);
+        // Update main control message - try to update stored message
+        let updated = await _updateMainControlMessage(guild.id, client, [embed], [row]);
+        
+        // If update failed (no stored message), try to use the interaction message instead
+        if (!updated && interaction.message && interaction.message.id && interaction.channel) {
+          try {
+            await interaction.message.edit({ embeds: [embed], components: [row] });
+            await _saveControlMessageForGuild(guild.id, interaction.channel.id, interaction.message.id, user.id);
+            updated = true;
+          } catch (e) { console.warn('Failed to edit interaction message during register', e); }
+        }
+        
         if (updated) {
           return await interaction.reply({ content: '✅ Вы зарегистрированы как владелец. Управление доступно.', ephemeral: true });
         } else {

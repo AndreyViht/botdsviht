@@ -10,6 +10,14 @@ const radios = JSON.parse(fs.readFileSync(radiosPath, 'utf-8'));
 
 // Store active radio states per guild
 const activeRadios = new Map();
+const db = require('../libs/db');
+
+async function _saveControlMessageForGuild(guildId, channelId, messageId) {
+  try {
+    const key = `musicControl_${guildId}`;
+    await db.set(key, { channelId, messageId });
+  } catch (e) { console.error('Failed to save control message to DB', e); }
+}
 
 async function handleMusicButton(interaction) {
   const { customId, user, member, guild, client } = interaction;
@@ -25,7 +33,17 @@ async function handleMusicButton(interaction) {
         new ButtonBuilder().setCustomId('music_link').setLabel('🔗 Ссылка').setStyle(ButtonStyle.Secondary).setDisabled(true),
         new ButtonBuilder().setCustomId('music_back').setLabel('← Назад').setStyle(ButtonStyle.Danger)
       );
-      try { await interaction.update({ embeds: [embed], components: [row] }); } catch (e) { await interaction.editReply({ embeds: [embed], components: [row] }).catch(()=>{}); }
+      try { 
+        await interaction.update({ embeds: [embed], components: [row] }); 
+        if (guild && guild.id && interaction.message && interaction.message.id) {
+          await _saveControlMessageForGuild(guild.id, interaction.channel.id, interaction.message.id);
+        }
+      } catch (e) { 
+        await interaction.editReply({ embeds: [embed], components: [row] }).catch(()=>{}); 
+        if (guild && guild.id && interaction.message && interaction.message.id) {
+          await _saveControlMessageForGuild(guild.id, interaction.channel.id, interaction.message.id).catch(()=>{});
+        }
+      }
       return;
     }
 
@@ -70,7 +88,26 @@ async function handleMusicButton(interaction) {
       }
       const voiceChannel = memberRef?.voice?.channel;
       if (!voiceChannel) {
-        return await interaction.editReply({ content: '❌ Ты не подключен к голосовому каналу', flags: 64 });
+        // Try to update the central control message with the error; fall back to ephemeral reply
+        const panelKey = `musicControl_${guild && guild.id ? guild.id : 'unknown'}`;
+        const panelRec = db.get(panelKey);
+        let updated = false;
+        if (panelRec && panelRec.channelId && panelRec.messageId) {
+          try {
+            const ch = await interaction.client.channels.fetch(panelRec.channelId).catch(() => null);
+            if (ch && ch.messages) {
+              const ctrl = await ch.messages.fetch(panelRec.messageId).catch(() => null);
+              if (ctrl) {
+                await ctrl.edit({ content: '❌ Ты не подключен к голосовому каналу', embeds: [], components: [] }).catch(() => {});
+                updated = true;
+              }
+            }
+          } catch (e) { /* ignore */ }
+        }
+        if (!updated) {
+          try { await interaction.reply({ content: '❌ Ты не подключен к голосовому каналу', ephemeral: true }); } catch (e) { try { await interaction.followUp({ content: '❌ Ты не подключен к голосовому каналу', ephemeral: true }); } catch (e2) {} }
+        }
+        return;
       }
 
       try {
@@ -162,8 +199,6 @@ async function handleMusicButton(interaction) {
 
     // Custom music - show search and queue options
     if (customId === 'music_own') {
-      await interaction.deferReply({ flags: 64 });
-      
       const embed = new EmbedBuilder()
         .setTitle('🎵 Своя музыка')
         .setColor(0x7289DA)
@@ -175,7 +210,9 @@ async function handleMusicButton(interaction) {
         new ButtonBuilder().setCustomId('music_menu').setLabel('← В меню').setStyle(ButtonStyle.Danger)
       );
 
-      await interaction.editReply({ embeds: [embed], components: [row] });
+      try { await interaction.update({ embeds: [embed], components: [row] });
+        if (guild && guild.id && interaction.message && interaction.message.id) { await _saveControlMessageForGuild(guild.id, interaction.channel.id, interaction.message.id).catch(()=>{}); }
+      } catch (e) { await interaction.editReply({ embeds: [embed], components: [row] }).catch(()=>{}); }
       return;
     }
 

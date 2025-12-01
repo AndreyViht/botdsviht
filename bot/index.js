@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, Partials, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ChannelType } = require('discord.js');
 const { token } = require('./config');
+const db = require('./libs/db');
 
 // Ensure ffmpeg binary is available to downstream modules (ffmpeg-static provides a binary)
 try {
@@ -17,7 +18,10 @@ try {
 } catch (e) {
   console.warn('ffmpeg-static not available; ensure ffmpeg is installed in PATH for audio playback');
 }
-if (!token) console.warn('DISCORD_TOKEN not set in env — set it in .env before starting the bot');
+if (!token) {
+  console.error('DISCORD_TOKEN not set in env — set it in .env before starting the bot. Exiting.');
+  process.exit(1);
+}
 // Intents
 // Include GuildVoiceStates so the bot can read which voice channel a member is in
 const intentsList = [
@@ -89,7 +93,7 @@ if (fs.existsSync(commandsPath)) {
     try { const command = require(path.join(commandsPath, file)); if (command.data && command.execute) client.commands.set(command.data.name, command); } catch (e) { console.warn('Failed loading command', file, e && e.message ? e.message : e); }
   }
 }
-const db = require('./libs/db');
+// db already required above
 const { sendPrompt } = require('./ai/vihtAi');
 const musicPlayer = require('./music/player2');
 const { handleMusicButton, ensureMusicControlPanel } = require('./music-interface/musicHandler');
@@ -267,6 +271,45 @@ client.on('interactionCreate', async (interaction) => {
     }
   } catch (err) { console.error('interactionCreate handler error', err); }
 });
+
+// Onboarding: send DM to new members unless they opted out
+client.on('guildMemberAdd', async (member) => {
+  try {
+    await db.ensureReady();
+    const prefs = db.get('prefs') || {};
+    const enabled = (prefs.onboarding && prefs.onboarding[member.id] !== false);
+    if (!enabled) return;
+    const welcome = `Привет, ${member.user.username}! Добро пожаловать на сервер. Если хотите, используйте команду /onboarding optout чтобы отключить приветственные сообщения.`;
+    await member.send(welcome).catch(() => null);
+  } catch (e) { console.warn('onboarding send failed', e && e.message); }
+});
+
+// Schedule persistent reminders stored in DB
+(async function scheduleReminders() {
+  try {
+    await db.ensureReady();
+    const reminders = db.get('reminders') || [];
+    const now = Date.now();
+    for (const r of reminders) {
+      const delay = Math.max(0, (r.when || 0) - now);
+      setTimeout(async () => {
+        try { const ch = await client.channels.fetch(r.channelId).catch(()=>null); if (ch) await ch.send(`<@${r.userId}> Напоминание: ${r.text}`); } catch (e) {}
+        // remove reminder from db
+        const cur = db.get('reminders') || [];
+        await db.set('reminders', cur.filter(x => x.id !== r.id));
+      }, delay);
+    }
+  } catch (e) { console.warn('scheduleReminders failed', e && e.message); }
+})();
+
+// Load user language preferences into client for quick access
+(async function loadUserLangs() {
+  try {
+    await db.ensureReady();
+    const ul = db.get('userLangs') || {};
+    client.userLangs = new Map(Object.entries(ul));
+  } catch (e) { client.userLangs = new Map(); }
+})();
 if (handleReactionAdd) client.on('messageReactionAdd', async (reaction, user) => { try { await handleReactionAdd(reaction, user); } catch (e) { console.error('messageReactionAdd handler:', e); } });
 if (handleReactionRemove) client.on('messageReactionRemove', async (reaction, user) => { try { await handleReactionRemove(reaction, user); } catch (e) { console.error('messageReactionRemove handler:', e); } });
 // AI chat handler

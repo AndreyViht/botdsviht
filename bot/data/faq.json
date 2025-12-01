@@ -1,0 +1,23 @@
+[
+  {
+    "id": "install_app",
+    "question_ru": "Где скачать приложение?",
+    "answer_ru": "Скачать приложение можно на https://vihtai.pro/downloads (выберите вашу платформу).",
+    "question_en": "Where can I download the app?",
+    "answer_en": "Download the app at https://vihtai.pro/downloads (choose your platform)."
+  },
+  {
+    "id": "create_key",
+    "question_ru": "Как создать ключ доступа?",
+    "answer_ru": "Авторизуйтесь на https://vihtai.pro через Telegram и создайте ключ для нужного устройства.",
+    "question_en": "How do I create an access key?",
+    "answer_en": "Sign in at https://vihtai.pro via Telegram and create a key for your device."
+  },
+  {
+    "id": "support",
+    "question_ru": "Как создать обращение в поддержку?",
+    "answer_ru": "Используйте команду `/support` или нажмите кнопку 'Создать обращение' в панели поддержки.",
+    "question_en": "How do I create a support ticket?",
+    "answer_en": "Use the `/support` command or press 'Create support' in the support panel."
+  }
+]

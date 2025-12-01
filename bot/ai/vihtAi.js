@@ -68,13 +68,18 @@ function cannedResponse(prompt) {
 
 async function sendPrompt(prompt, opts = {}) {
   const userId = opts.authorId || 'unknown';
-  
+  await db.ensureReady();
+  const aiPrefs = db.get('aiPrefs') || {};
+  const userOptOut = aiPrefs[userId] && aiPrefs[userId].optOut;
+
   // Check for canned responses FIRST (only on explicit questions)
   const canned = cannedResponse(prompt);
   if (canned) {
-    // Store canned responses in history too for context
-    chatHistory.addMessage(userId, 'user', String(prompt));
-    chatHistory.addMessage(userId, 'assistant', canned);
+    // Store canned responses in history too for context unless user opted out
+    if (!userOptOut) {
+      chatHistory.addMessage(userId, 'user', String(prompt));
+      chatHistory.addMessage(userId, 'assistant', canned);
+    }
     return canned;
   }
 
@@ -176,9 +181,11 @@ async function sendPrompt(prompt, opts = {}) {
         let out = sanitizeText(text);
         if (out.length > 1800) out = out.slice(0, 1800).trim();
         
-        // Store in history for context
-        chatHistory.addMessage(userId, 'user', String(prompt));
-        chatHistory.addMessage(userId, 'assistant', out);
+        // Store in history for context unless user opted out
+        if (!userOptOut) {
+          chatHistory.addMessage(userId, 'user', String(prompt));
+          chatHistory.addMessage(userId, 'assistant', out);
+        }
         
         try { if (db && db.incrementAi) db.incrementAi(); } catch (e) { console.warn('incrementAi failed:', e && e.message); }
         return out;

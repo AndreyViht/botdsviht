@@ -10,6 +10,10 @@ const radios = JSON.parse(fs.readFileSync(radiosPath, 'utf-8'));
 const activeRadios = new Map();
 const db = require('../libs/db');
 
+// Status channel where the bot posts who occupies the music bot
+const STATUS_CHANNEL_ID = '1441896031531827202';
+const ADMIN_ROLE_ID = '1436485697392607303';
+
 // ===== HELPERS =====
 async function _getControlRecForGuild(guildId) {
   try {
@@ -45,6 +49,54 @@ async function _clearMusicOwner(guildId) {
     delete existing.owner;
     await db.set(key, existing);
   } catch (e) { console.error('Failed to clear music owner in DB', e); }
+}
+
+// Update the public status message in STATUS_CHANNEL_ID about current owner
+async function _updateStatusChannel(guildId, client) {
+  try {
+    if (!client) return;
+    const controlKey = `musicControl_${guildId}`;
+    const controlRec = db.get(controlKey) || {};
+    const ownerId = controlRec.owner || null;
+
+    const key = `musicStatus_${guildId}`;
+    const rec = db.get(key) || {};
+
+    const ch = await client.channels.fetch(STATUS_CHANNEL_ID).catch(() => null);
+    if (!ch) return;
+
+    let embed;
+    let components = [];
+    if (ownerId) {
+      embed = new EmbedBuilder().setTitle('🎛️ Статус: Плеер занят').setColor(0xE74C3C)
+        .setDescription(`Плеер сейчас занят пользователем <@${ownerId}>.`)
+        .addFields({ name: 'Действия', value: 'Админ может отключить плеер ниже.' });
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`music_admin_release_${guildId}_${ownerId}`).setLabel('Отключить (админ)').setStyle(ButtonStyle.Danger)
+      );
+      components = [row];
+    } else {
+      embed = new EmbedBuilder().setTitle('🎛️ Статус: Плеер свободен').setColor(0x2ECC71)
+        .setDescription('Плеер свободен — нажмите «Начать пользоваться» в панели управления, чтобы занять его.');
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary)
+      );
+      components = [row];
+    }
+
+    if (rec && rec.messageId) {
+      const old = await ch.messages.fetch(rec.messageId).catch(() => null);
+      if (old) {
+        await old.edit({ embeds: [embed], components }).catch(() => null);
+        return;
+      }
+    }
+
+    const msg = await ch.send({ embeds: [embed], components }).catch(() => null);
+    if (msg) {
+      await db.set(key, { channelId: ch.id, messageId: msg.id });
+    }
+  } catch (e) { console.error('_updateStatusChannel error', e); }
 }
 
 // Update the MAIN control message in DB, not interaction message
@@ -115,6 +167,8 @@ async function handleMusicButton(interaction) {
         }
         // Set owner
         await _setMusicOwner(guild.id, user.id);
+        // Update public status message about owner
+        try { await _updateStatusChannel(guild.id, client); } catch (e) {}
         // Show owner menu
         const embed = createMusicMenuEmbed();
         const row = new ActionRowBuilder().addComponents(
@@ -168,6 +222,7 @@ async function handleMusicButton(interaction) {
       try {
         try { await musicPlayer.stop(guild); } catch (e) { console.warn('music_release: stop failed', e); }
         await _clearMusicOwner(guild.id);
+        try { await _updateStatusChannel(guild.id, client); } catch (e) {}
         
         // Reset main message to register view
         const embed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы начать пользоваться ботом (первый нажимает — становится владельцем плеера).');
@@ -342,6 +397,7 @@ async function handleMusicButton(interaction) {
         await musicPlayer.stop(guild);
         activeRadios.delete(guild.id);
         await _clearMusicOwner(guild.id).catch(()=>{});
+        try { await _updateStatusChannel(guild.id, client); } catch (e) {}
         const registerEmbed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы начать пользоваться ботом (первый нажимает — становится владельцем плеера).');
         const registerRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary));
         await _updateMainControlMessage(guild.id, client, [registerEmbed], [registerRow]);
@@ -349,6 +405,32 @@ async function handleMusicButton(interaction) {
       } catch (err) {
         try { await interaction.reply({ content: '❌ Ошибка при остановке', ephemeral: true }); } catch (e) {}
       }
+      return;
+    }
+
+    // ===== ADMIN RELEASE (from status message) =====
+    if (customId && customId.startsWith('music_admin_release_')) {
+      try {
+        // customId format: music_admin_release_<guildId>_<ownerId>
+        const parts = customId.split('_');
+        const targetGuildId = parts[3];
+        const targetOwnerId = parts[4] || null;
+        // Only allow admins
+        const memberObj = member || (guild ? await guild.members.fetch(user.id).catch(() => null) : null);
+        const isAdmin = memberObj && memberObj.roles && memberObj.roles.cache && memberObj.roles.cache.has(ADMIN_ROLE_ID);
+        if (!isAdmin) return await interaction.reply({ content: 'У вас нет прав для этой операции.', ephemeral: true });
+
+        // Stop music and clear owner
+        try { await musicPlayer.stop(guild); } catch (e) { console.warn('admin_release: stop failed', e); }
+        await _clearMusicOwner(guild.id);
+        await _updateStatusChannel(guild.id, client).catch(()=>{});
+        const embed = new EmbedBuilder().setTitle('⏹️ Плеер отключён администратором').setColor(0xE74C3C).setDescription(`Плеер принудительно отключён администратором <@${user.id}>. Ранее был занят пользователем <@${targetOwnerId}>.`);
+        // Reset main control message to register view
+        const registerEmbed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы начать пользоваться ботом (первый нажимает — становится владельцем плеера).');
+        const registerRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary));
+        await _updateMainControlMessage(guild.id, client, [registerEmbed], [registerRow]);
+        try { await interaction.reply({ embeds: [embed] }); } catch (e) {}
+      } catch (e) { console.error('music_admin_release handler error', e); try { await interaction.reply({ content: 'Ошибка при выполнении админ‑отключения.', ephemeral: true }); } catch(ignore){} }
       return;
     }
 

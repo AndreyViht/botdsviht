@@ -30,6 +30,13 @@ module.exports = {
     }
     await db.set('gameStats', gameStats);
 
+    // Awards
+    try {
+      const ach = require('../libs/achievements');
+      await ach.checkFirstCommand(userId, interaction);
+      await ach.checkGameAchievements(userId, interaction);
+    } catch (e) {}
+
     const result = coinFlip === 0 ? '🦅 Орёл' : '⚙️ Решка';
     const guess = userGuess === 0 ? '🦅 Орёл' : '⚙️ Решка';
 

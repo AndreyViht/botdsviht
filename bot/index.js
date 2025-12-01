@@ -141,7 +141,19 @@ client.on('interactionCreate', async (interaction) => {
         try { await safeShowModal(interaction, modal); } catch (e) { console.error('showModal failed', e); await safeReply(interaction, { content: 'Не удалось открыть форму.', ephemeral: true }); }
         return;
       }
-      // Admin: begin confirm close all flow
+          try {
+            // register first-command achievement when user runs any command
+            try {
+              await achievements.checkFirstCommand(interaction.user.id, interaction);
+            } catch (e) {
+              // ignore achievement errors
+            }
+
+            await command.execute(interaction);
+          } catch (error) {
+            console.error(error);
+            await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+          }
       if (interaction.customId === 'support_close_all') {
         const STAFF_ROLES = ['1436485697392607303','1436486253066326067'];
         const member = interaction.member; const isStaff = member && member.roles && member.roles.cache && STAFF_ROLES.some(r => member.roles.cache.has(r));

@@ -33,6 +33,13 @@ module.exports = {
     }
     await db.set('gameStats', gameStats);
 
+    // Awards
+    try {
+      const ach = require('../libs/achievements');
+      await ach.checkFirstCommand(userId, interaction);
+      await ach.checkGameAchievements(userId, interaction);
+    } catch (e) {}
+
     const embed = new EmbedBuilder()
       .setTitle('🎲 Игра в кубики')
       .setColor(won ? 0x00AA00 : 0xAA0000)

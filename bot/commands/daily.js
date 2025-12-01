@@ -37,6 +37,20 @@ module.exports = {
     dailyRewards[userId] = { lastClaim: now, streak: newStreak };
     await db.set('dailyRewards', dailyRewards);
 
+    // Give reputation to gameStats.totalRep as well
+    const gameStats = db.get('gameStats') || {};
+    if (!gameStats[userId]) gameStats[userId] = { wins: 0, losses: 0, totalRep: 0 };
+    gameStats[userId].totalRep = (gameStats[userId].totalRep || 0) + totalReward;
+    await db.set('gameStats', gameStats);
+
+    // Awards (daily achievements + first command)
+    try {
+      const ach = require('../libs/achievements');
+      await ach.checkFirstCommand(userId, interaction);
+      await ach.checkDailyAchievements(userId, interaction);
+      await ach.checkGameAchievements(userId, interaction);
+    } catch (e) {}
+
     const embed = new EmbedBuilder()
       .setTitle('🎁 Ежедневный бонус')
       .setColor(0xFFAA00)

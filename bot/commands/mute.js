@@ -40,25 +40,53 @@ module.exports = {
           color: '#808080',
           reason: 'Роль для замучиванных пользователей'
         });
+      }
 
-        // Установить permissions на каналы
+      // Установить/обновить permissions на все каналы: запретить отправку сообщений и реакции в текстовых, и говорить/подключаться в голосовых
+      try {
         const channels = await interaction.guild.channels.fetch();
         for (const [, channel] of channels) {
-          if (channel.isTextBased() || channel.isVoiceBased()) {
-            try {
+          try {
+            if (channel.isTextBased && channel.isTextBased()) {
               await channel.permissionOverwrites.edit(mutedRole, {
                 SendMessages: false,
-                Speak: false,
                 AddReactions: false
               });
-            } catch (err) {
-              // Игнорировать ошибки permissions
             }
+            if (channel.isVoiceBased && channel.isVoiceBased()) {
+              await channel.permissionOverwrites.edit(mutedRole, {
+                Speak: false,
+                Connect: false
+              });
+            }
+          } catch (err) {
+            // Игнорировать ошибки permissions для отдельных каналов
           }
         }
+      } catch (err) {
+        // Игнорировать
       }
 
       await targetMember.roles.add(mutedRole);
+
+      // Отключить из голосового канала, если пользователь был в нём (если у бота есть право перемещать участников)
+      try {
+        if (targetMember.voice && targetMember.voice.channel) {
+          // try to move to null (disconnect)
+          await targetMember.voice.setChannel(null).catch(() => {});
+        }
+      } catch (err) {
+        // Игнорировать ошибки при отключении
+      }
+
+      // Отключить из голосового канала, если пользователь был в нём
+      try {
+        if (targetMember.voice && targetMember.voice.channel) {
+          await targetMember.voice.setChannel(null).catch(() => {});
+        }
+      } catch (err) {
+        // Игнорировать ошибки при отключении
+      }
 
       // Сохранить в БД
       const mutes = db.get('mutes') || {};

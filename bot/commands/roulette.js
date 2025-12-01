@@ -29,6 +29,13 @@ module.exports = {
     }
     await db.set('gameStats', gameStats);
 
+    // Awards
+    try {
+      const ach = require('../libs/achievements');
+      await ach.checkFirstCommand(userId, interaction);
+      await ach.checkGameAchievements(userId, interaction);
+    } catch (e) {}
+
     const chamber = Array(6).fill('💨').map((v, i) => i === 2 ? '💥' : v);
     const chambers = chamber.join('');
 

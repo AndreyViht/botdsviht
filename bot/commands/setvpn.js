@@ -4,7 +4,7 @@ const db = require('../libs/db');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setvpn')
-    .setDescription('Установить тестовый IP/адрес VPN (только для админов)')
+    .setDescription('🌐 Установить тестовый VPN адрес (только администраторы)')
     .addStringOption(opt => opt.setName('ip').setDescription('IP или адрес сервера').setRequired(true)),
 
   async execute(interaction) {

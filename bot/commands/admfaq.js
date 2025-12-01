@@ -19,7 +19,7 @@ const ADMIN_ROLE_ID = '1436485697392607303';
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('admfaq')
-    .setDescription('Список администраторских команд'),
+    .setDescription('👑 Справка по администраторским командам'),
 
   async execute(interaction) {
     // Check if user has admin role

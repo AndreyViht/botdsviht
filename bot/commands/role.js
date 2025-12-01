@@ -9,7 +9,7 @@ function loadRoles() {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('role')
-    .setDescription('Самоназначаемые роли')
+    .setDescription('🎭 Управление самоназначаемыми ролями (только администраторы)')
     .addStringOption(o => o.setName('action').setDescription('assign|remove|list').setRequired(true))
     .addStringOption(o => o.setName('roleid').setDescription('ID роли для assign/remove').setRequired(false)),
 

@@ -8,7 +8,7 @@ const PROTECTED_IP = '45.135.182.8';
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('vpn')
-    .setDescription('Анализ VPN-соединения (лок: страна/город, провайдер). IP скрыт по соображениям безопасности.'),
+    .setDescription('🌐 Анализ VPN: местоположение, провайдер (IP защищен)'),
 
   async execute(interaction) {
     await interaction.deferReply();

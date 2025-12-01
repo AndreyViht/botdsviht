@@ -7,7 +7,7 @@ function randInt(min, max) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('test')
-    .setDescription('Проверка работоспособности бота и интеграции AI'),
+    .setDescription('🧪 Проверка работоспособности бота и AI интеграции'),
 
   async execute(interaction) {
     // We intentionally do not expose internal keys or call the upstream API here for speed.

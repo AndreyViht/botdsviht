@@ -5,7 +5,7 @@ const chatHistory = require('../ai/chatHistory');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('profile')
-    .setDescription('Показывает простую статистику профиля пользователя'),
+    .setDescription('👤 Просмотр вашего профиля со статистикой и репутацией')
 
   async execute(interaction) {
     await db.ensureReady();

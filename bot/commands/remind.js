@@ -19,7 +19,7 @@ function parseDuration(s) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('remind')
-    .setDescription('Установить напоминание (например: 10m, 2h, 1d)')
+    .setDescription('⏰ Установить напоминание (например: 10m, 2h, 1d)')
     .addStringOption(o => o.setName('when').setDescription('Через какое время (10m/2h/1d)').setRequired(true))
     .addStringOption(o => o.setName('text').setDescription('Текст напоминания').setRequired(true)),
 

@@ -4,7 +4,7 @@ const db = require('../libs/db');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('lang')
-    .setDescription('Выбрать язык для бота')
+    .setDescription('🌍 Выбор языка интерфейса (RU/EN) (только администраторы)')
     .addStringOption(o => o.setName('locale').setDescription('ru|en').setRequired(true)),
 
   async execute(interaction) {

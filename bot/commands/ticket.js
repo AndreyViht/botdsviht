@@ -4,7 +4,7 @@ const db = require('../libs/db');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ticket')
-    .setDescription('Работа с тикетами')
+    .setDescription('🎫 Просмотр статуса обращения и тикетов (только администраторы)')
     .addSubcommand(s => s.setName('status').setDescription('Показать статус тикета').addStringOption(o => o.setName('id').setDescription('ID тикета').setRequired(false))),
 
   async execute(interaction) {

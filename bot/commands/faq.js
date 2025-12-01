@@ -30,7 +30,7 @@ const adminCommands = [
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('faq')
-    .setDescription('Список всех доступных команд'),
+    .setDescription('📚 Список всего доступных команд и справка')
 
   async execute(interaction) {
     const lang = (interaction.client && interaction.client.userLangs && interaction.client.userLangs.get(interaction.user.id)) || 'ru';

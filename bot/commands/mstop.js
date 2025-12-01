@@ -4,7 +4,7 @@ const db = require('../libs/db');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('mstop')
-    .setDescription('Админ: показать кто занимает плеер и дать кнопку отключить (только для роли 1436485697392607303)'),
+    .setDescription('⏹️ Просмотр занятости музыкального плеера и его отключение (только администраторы)'),
 
   async execute(interaction) {
     const ADMIN_ROLE = '1436485697392607303';

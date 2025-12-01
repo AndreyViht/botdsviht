@@ -5,7 +5,7 @@ const db = require('../libs/db');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('testvpn')
-    .setDescription('Показать/протестировать текущий тестовый VPN IP (провайдер/регион).'),
+    .setDescription('🧸 Показать/протестировать тестовый VPN (IP защищен)'),
 
   async execute(interaction) {
     await interaction.deferReply();

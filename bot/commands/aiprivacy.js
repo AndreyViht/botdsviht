@@ -5,7 +5,7 @@ const chatHistory = require('../ai/chatHistory');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('aiprivacy')
-    .setDescription('Настройки приватности для AI (история)')
+    .setDescription('🔒 Управление приватностью ИИ: история, удаление (только администраторы)')
     .addStringOption(opt => opt.setName('action').setDescription('optin|optout|delete').setRequired(true)),
 
   async execute(interaction) {

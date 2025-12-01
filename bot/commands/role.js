@@ -1,48 +1,136 @@
-const { SlashCommandBuilder } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-
-function loadRoles() {
-  try { return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'selfroles.json'), 'utf8')); } catch (e) { return []; }
-}
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const db = require('../libs/db');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('role')
-    .setDescription('🎭 Управление самоназначаемыми ролями (только администраторы)')
-    .addStringOption(o => o.setName('action').setDescription('assign|remove|list').setRequired(true))
-    .addStringOption(o => o.setName('roleid').setDescription('ID роли для assign/remove').setRequired(false)),
+    .setDescription('🎭 [АДМИН] Управление ролями')
+    .addSubcommand(sub => sub
+      .setName('grant')
+      .setDescription('Выдать роль пользователю')
+      .addUserOption(opt => opt.setName('user').setDescription('Пользователь').setRequired(true))
+      .addRoleOption(opt => opt.setName('role').setDescription('Роль').setRequired(true)))
+    .addSubcommand(sub => sub
+      .setName('revoke')
+      .setDescription('Забрать роль у пользователя')
+      .addUserOption(opt => opt.setName('user').setDescription('Пользователь').setRequired(true))
+      .addRoleOption(opt => opt.setName('role').setDescription('Роль').setRequired(true)))
+    .addSubcommand(sub => sub
+      .setName('list')
+      .setDescription('Список всех ролей сервера'))
+    .addSubcommand(sub => sub
+      .setName('hierarchy')
+      .setDescription('Просмотреть иерархию ролей')),
 
   async execute(interaction) {
-    // Check admin role
+    await db.ensureReady();
     const ADMIN_ROLE = '1436485697392607303';
-    const member = interaction.member || (interaction.guild ? await interaction.guild.members.fetch(interaction.user.id).catch(() => null) : null);
-    if (!member || !member.roles || !member.roles.cache || !member.roles.cache.has(ADMIN_ROLE)) {
-      return await interaction.reply({ content: 'У вас нет доступа к этой команде. Требуется административная роль.', ephemeral: true });
+    const sub = interaction.options.getSubcommand();
+
+    const isAdmin = interaction.member.roles.cache.has(ADMIN_ROLE);
+    if (!isAdmin) {
+      return await interaction.reply({ content: '❌ Только администраторы могут это делать.', ephemeral: true });
     }
 
-    const action = interaction.options.getString('action');
-    const roleId = interaction.options.getString('roleid');
-    const available = loadRoles();
+    if (sub === 'grant') {
+      const targetUser = interaction.options.getUser('user');
+      const roleToGrant = interaction.options.getRole('role');
 
-    if (action === 'list') {
-      const list = available.map(r => `${r.id} — ${r.name}`).join('\n');
-      return await interaction.reply({ content: `Доступные роли:\n${list}`, ephemeral: true });
+      try {
+        const targetMember = await interaction.guild.members.fetch(targetUser.id);
+
+        if (targetMember.roles.cache.has(roleToGrant.id)) {
+          return await interaction.reply({ content: `❌ У ${targetUser.username} уже есть роль ${roleToGrant.name}.`, ephemeral: true });
+        }
+
+        await targetMember.roles.add(roleToGrant);
+
+        const embed = new EmbedBuilder()
+          .setColor('#4CAF50')
+          .setTitle('🎭 Роль выдана')
+          .addFields(
+            { name: 'Пользователь', value: targetUser.username, inline: true },
+            { name: 'Роль', value: roleToGrant.name, inline: true },
+            { name: 'Админ', value: interaction.user.username, inline: true }
+          )
+          .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
+      } catch (err) {
+        return await interaction.reply({ content: `❌ Ошибка: ${err.message}`, ephemeral: true });
+      }
+      return;
     }
 
-    if (!roleId) return await interaction.reply({ content: 'Укажите roleid.', ephemeral: true });
-    const roleInfo = available.find(r => r.id === roleId);
-    if (!roleInfo) return await interaction.reply({ content: 'Роль не найдена в selfroles.', ephemeral: true });
+    if (sub === 'revoke') {
+      const targetUser = interaction.options.getUser('user');
+      const roleToRevoke = interaction.options.getRole('role');
 
-    if (!member) return await interaction.reply({ content: 'Не удалось получить информацию о пользователе.', ephemeral: true });
+      try {
+        const targetMember = await interaction.guild.members.fetch(targetUser.id);
 
-    if (action === 'assign') {
-      try { await member.roles.add(roleId); return await interaction.reply({ content: `Роль ${roleInfo.name} назначена.`, ephemeral: true }); } catch (e) { return await interaction.reply({ content: 'Не удалось назначить роль. У бота недостаточно прав.', ephemeral: true }); }
+        if (!targetMember.roles.cache.has(roleToRevoke.id)) {
+          return await interaction.reply({ content: `❌ У ${targetUser.username} нет роли ${roleToRevoke.name}.`, ephemeral: true });
+        }
+
+        await targetMember.roles.remove(roleToRevoke);
+
+        const embed = new EmbedBuilder()
+          .setColor('#FF6B6B')
+          .setTitle('🎭 Роль отобрана')
+          .addFields(
+            { name: 'Пользователь', value: targetUser.username, inline: true },
+            { name: 'Роль', value: roleToRevoke.name, inline: true },
+            { name: 'Админ', value: interaction.user.username, inline: true }
+          )
+          .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
+      } catch (err) {
+        return await interaction.reply({ content: `❌ Ошибка: ${err.message}`, ephemeral: true });
+      }
+      return;
     }
-    if (action === 'remove') {
-      try { await member.roles.remove(roleId); return await interaction.reply({ content: `Роль ${roleInfo.name} удалена.`, ephemeral: true }); } catch (e) { return await interaction.reply({ content: 'Не удалось удалить роль. У бота недостаточно прав.', ephemeral: true }); }
+
+    if (sub === 'list') {
+      const roles = interaction.guild.roles.cache
+        .filter(r => r.name !== '@everyone')
+        .sort((a, b) => b.position - a.position)
+        .slice(0, 25);
+
+      if (roles.size === 0) {
+        return await interaction.reply({ content: '❌ На сервере нет ролей.', ephemeral: true });
+      }
+
+      const lines = roles.map(r => `${r.toString()} • ${r.members.size} членов • Позиция: ${r.position}`).join('\n');
+
+      const embed = new EmbedBuilder()
+        .setColor('#9C27B0')
+        .setTitle('🎭 Роли сервера')
+        .setDescription(lines)
+        .setFooter({ text: `Всего ролей: ${interaction.guild.roles.cache.size}` })
+        .setTimestamp();
+
+      await interaction.reply({ embeds: [embed], ephemeral: true });
+      return;
     }
 
-    await interaction.reply({ content: 'Неизвестная команда.', ephemeral: true });
+    if (sub === 'hierarchy') {
+      const roles = interaction.guild.roles.cache
+        .sort((a, b) => b.position - a.position)
+        .slice(0, 20);
+
+      const lines = roles
+        .map((r, i) => `${i + 1}. ${r.toString()} (Позиция: ${r.position})`)
+        .join('\n');
+
+      const embed = new EmbedBuilder()
+        .setColor('#2196F3')
+        .setTitle('🎭 Иерархия ролей')
+        .setDescription(lines || 'Нет ролей')
+        .setTimestamp();
+
+      await interaction.reply({ embeds: [embed], ephemeral: true });
+    }
   }
 };

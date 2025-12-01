@@ -3,8 +3,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('vers')
-    .setDescription('📦 Версия бота (только администраторы)
-    ,
+    .setDescription('📦 Версия бота (только администраторы)'),
 
   async execute(interaction) {
     try {

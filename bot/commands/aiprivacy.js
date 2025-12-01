@@ -21,10 +21,7 @@ module.exports = {
     await db.ensureReady();
     const aiPrefs = db.get('aiPrefs') || {};
 
-    // Only users with admin role may opt users in/out of AI history
-    const ADMIN_ROLE = '1436485697392607303';
     if (action === 'optout' || action === 'optin') {
-      const member = interaction.member || (interaction.guild ? await interaction.guild.members.fetch(interaction.user.id).catch(() => null) : null);
       const hasRole = member && member.roles && member.roles.cache && member.roles.cache.has(ADMIN_ROLE);
       if (!hasRole) {
         return await interaction.reply({ content: 'У вас нет прав для включения/отключения сохранения истории. Обратитесь к администратору.', ephemeral: true });

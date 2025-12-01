@@ -34,7 +34,6 @@ module.exports = {
     const roleInfo = available.find(r => r.id === roleId);
     if (!roleInfo) return await interaction.reply({ content: 'Роль не найдена в selfroles.', ephemeral: true });
 
-    const member = interaction.guild && interaction.guild.members.cache.get(interaction.user.id) ? interaction.guild.members.cache.get(interaction.user.id) : await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
     if (!member) return await interaction.reply({ content: 'Не удалось получить информацию о пользователе.', ephemeral: true });
 
     if (action === 'assign') {

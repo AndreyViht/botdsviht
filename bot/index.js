@@ -99,6 +99,7 @@ const musicPlayer = require('./music/player2');
 const { handleMusicButton, ensureMusicControlPanel } = require('./music-interface/musicHandler');
 const { handleControlPanelButton } = require('./music-interface/controlPanelHandler');
 const { handlePriceButton } = require('./price/priceHandler');
+const { handleAiButton } = require('./ai/aiHandler');
 // optional helpers
 let handleReactionAdd = null;
 let handleReactionRemove = null;
@@ -193,6 +194,11 @@ client.on('interactionCreate', async (interaction) => {
       // Price menu buttons
       if (interaction.customId && interaction.customId.startsWith('price_')) {
         try { await handlePriceButton(interaction); } catch (err) { console.error('Price button error', err); await safeReply(interaction, { content: 'Ошибка при обработке прайса.', ephemeral: true }); }
+        return;
+      }
+      // AI buttons (ai_register, ai_close, ai_new, ai_delete)
+      if (interaction.customId && interaction.customId.startsWith('ai_')) {
+        try { await handleAiButton(interaction); } catch (err) { console.error('AI button error', err); await safeReply(interaction, { content: 'Ошибка при обработке кнопки ИИ.', ephemeral: true }); }
         return;
       }
       // Music/Radio buttons

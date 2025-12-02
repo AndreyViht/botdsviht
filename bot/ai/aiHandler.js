@@ -80,9 +80,15 @@ async function handleAiButton(interaction) {
         const threadName = `ai-${interaction.user.username}-${Date.now()}`;
         let thread = null;
         try {
-          thread = await interaction.message.startThread({ name: threadName, autoArchiveDuration: 1440, type: ChannelType.PrivateThread });
+          const channel = interaction.message.channel;
+          if (channel && channel.threads && typeof channel.threads.create === 'function') {
+            thread = await channel.threads.create({ name: threadName, autoArchiveDuration: 1440, type: ChannelType.PrivateThread });
+          } else {
+            // fallback to startThread if channel API not available
+            thread = await interaction.message.startThread({ name: threadName, autoArchiveDuration: 1440, type: ChannelType.PrivateThread });
+          }
         } catch (errThread) {
-          console.warn('startThread PrivateThread failed', errThread && errThread.message ? errThread.message : errThread);
+          console.warn('creating private thread failed', errThread && errThread.message ? errThread.message : errThread);
           thread = null;
         }
 
@@ -168,9 +174,14 @@ async function handleAiButton(interaction) {
         const threadName = `ai-${interaction.user.username}-${Date.now()}`;
         let thread = null;
         try {
-          thread = await interaction.message.startThread({ name: threadName, autoArchiveDuration: 1440, type: ChannelType.PrivateThread });
+          const channel = interaction.message.channel;
+          if (channel && channel.threads && typeof channel.threads.create === 'function') {
+            thread = await channel.threads.create({ name: threadName, autoArchiveDuration: 1440, type: ChannelType.PrivateThread });
+          } else {
+            thread = await interaction.message.startThread({ name: threadName, autoArchiveDuration: 1440, type: ChannelType.PrivateThread });
+          }
         } catch (err) {
-          console.warn('startThread PrivateThread failed for ai_new', err && err.message ? err.message : err);
+          console.warn('creating private thread failed for ai_new', err && err.message ? err.message : err);
           thread = null;
         }
         if (!thread) {

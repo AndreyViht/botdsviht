@@ -11,6 +11,9 @@ const { Readable, PassThrough } = require('stream');
 const YTDLP_BIN = process.env.YTDLP_PATH || process.env.YTDLP_BIN || 'yt-dlp';
 const FFMPEG_BIN = process.env.FFMPEG_PATH || process.env.FFMPEG_BIN || 'ffmpeg';
 
+// Log channel for music occupancy and notifications
+const LOG_CHANNEL_ID = '1445119290444480684';
+
 // single in-memory state map
 const players = new Map();
 
@@ -800,6 +803,27 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
 
     state.player.once(AudioPlayerStatus.Idle, async () => {
       state.playing = false;
+      // If a release-after request exists, clear owner and notify requester
+      try {
+        const releaseAfter = db.get(`musicReleaseAfter_${guild.id}`) || null;
+        if (releaseAfter) {
+          // clear owner in control record
+          const panelKey = `musicControl_${guild.id}`;
+          const panelRec = db.get(panelKey) || {};
+          delete panelRec.owner;
+          await db.set(panelKey, panelRec).catch(()=>{});
+          // clear the release flag
+          await db.set(`musicReleaseAfter_${guild.id}`, null).catch(()=>{});
+          // update control/status message
+          try { await updateControlMessageWithError(guild.id, state._client, '⏳ Плеер освобождён по запросу'); } catch (e) {}
+          try { await _updateStatusChannel(guild.id, state._client); } catch (e) {}
+          // notify requester
+          try { const u = await (state._client && state._client.users ? state._client.users.fetch(releaseAfter).catch(()=>null) : null); if (u) await u.send(`Владелец освободил плеер на сервере **${guild.name}** — вы можете теперь воспользоваться им.`).catch(()=>null); } catch (e) {}
+          // log to channel
+          try { const logCh = state._client && state._client.channels ? await state._client.channels.fetch(LOG_CHANNEL_ID).catch(()=>null) : null; if (logCh) await logCh.send(`⏳ Автоматическое освобождение плеера для сервера **${guild.name}** по запросу <@${releaseAfter}>`); } catch (e) {}
+        }
+      } catch (e) { console.warn('release-after check failed', e && e.message ? e.message : e); }
+
       // clear current but keep connection alive until explicit stop
       state.current = null;
       if (state.queue.length > 0) {

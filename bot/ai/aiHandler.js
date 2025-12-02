@@ -104,19 +104,19 @@ async function handleAiButton(interaction) {
               const role = interaction.guild.roles.cache.get(CONTROL_ROLE_ID);
               if (role) {
                 const membersWithRole = interaction.guild.members.cache.filter(m => m.roles.cache.has(CONTROL_ROLE_ID));
-                all[userId] = { chatId, status: 'open', createdAt: new Date().toISOString() };
-                all[userId].threadId = thread.id;
-                all[userId].threadChannel = interaction.message.channel.id;
                 // Restrict visibility: deny @everyone, allow creator and control role (best-effort)
-                try {
-                  await thread.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false }).catch(() => null);
-                } catch (e) {}
+                try { await thread.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false }).catch(() => null); } catch (e) {}
                 try { await thread.permissionOverwrites.edit(CONTROL_ROLE_ID, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
                 try { await thread.permissionOverwrites.edit(interaction.user.id, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
-                  try { await thread.members.add(m.id).catch(() => null); } catch (e) {}
-                }
+                // Add members with the control role into thread members (best-effort)
+                try {
+                  for (const m of membersWithRole.values()) {
+                    try { await thread.members.add(m.id).catch(() => null); } catch (e) {}
+                  }
+                } catch (e) {}
               }
             }
+          }
           } catch (e) {}
           // Send a welcome message inside thread so it appears active and the user sees it
           try {

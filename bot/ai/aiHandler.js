@@ -51,18 +51,31 @@ async function handleAiButton(interaction) {
       // Create a new chat id and record
       const chatId = `ai_${Date.now()}`;
       all[userId] = { chatId, status: 'open', createdAt: new Date().toISOString() };
-      // Create a private thread for user's AI chat under the same channel where button was pressed
+      // Create a private thread for user's AI chat attached to the original message
       try {
-        const parent = interaction.message.channel;
         const threadName = `ai-${interaction.user.username}-${Date.now()}`;
-        const thread = await parent.threads.create({ name: threadName, autoArchiveDuration: 1440, type: ChannelType.PrivateThread }).catch(() => null);
+        let thread = null;
+        try {
+          thread = await interaction.message.startThread({ name: threadName, autoArchiveDuration: 1440, type: ChannelType.PrivateThread });
+        } catch (errThread) {
+          console.warn('startThread PrivateThread failed, attempting PublicThread', errThread && errThread.message ? errThread.message : errThread);
+          try {
+            thread = await interaction.message.startThread({ name: threadName, autoArchiveDuration: 1440, type: ChannelType.PublicThread });
+          } catch (errPublic) {
+            console.warn('startThread PublicThread failed', errPublic && errPublic.message ? errPublic.message : errPublic);
+            thread = null;
+          }
+        }
+
         if (thread) {
-          try { await thread.members.add(interaction.user.id).catch(() => null); } catch (e) {}
+          try { await thread.members.add(interaction.user.id).catch(() => null); } catch (e) { /* ignore */ }
           all[userId].threadId = thread.id;
-          all[userId].threadChannel = parent.id;
+          all[userId].threadChannel = interaction.message.channel.id;
+        } else {
+          console.warn('Thread creation failed for user', interaction.user.id);
         }
       } catch (e) {
-        console.warn('Failed creating AI private thread', e && e.message ? e.message : e);
+        console.warn('Failed creating AI thread', e && e.message ? e.message : e);
       }
 
       await db.set('aiChats', all);

@@ -56,7 +56,7 @@ if (fs.existsSync(commandsPath)) {
 // db already required above
 const { sendPrompt } = require('./ai/vihtAi');
 const musicPlayer = require('./music/player2');
-const { handleMusicButton, ensureMusicControlPanel } = require('./music-interface/musicHandler');
+const { handleMusicButton, ensureMusicControlPanel, updateControlMessageWithError } = require('./music-interface/musicHandler');
 const { handleControlPanelButton } = require('./music-interface/controlPanelHandler');
 const { handlePriceButton } = require('./price/priceHandler');
 const { handleAiButton, createAiPanelEmbed, makeButtons: makeAiButtons } = require('./ai/aiHandler');
@@ -339,7 +339,7 @@ client.on('interactionCreate', async (interaction) => {
             const controlChannelId = '1443194196172476636';
             const controlCh = await client.channels.fetch(controlChannelId).catch(() => null);
             if (controlCh && controlCh.guild && String(controlCh.guild.id) === String(guild.id)) {
-              try { await ensureMusicControlPanel(controlCh); } catch (e) { console.warn('ensureMusicControlPanel failed', e && e.message); }
+              try { await ensureMusicControlPanel(controlCh, cache.userId); } catch (e) { console.warn('ensureMusicControlPanel failed', e && e.message); }
             }
           } catch (e) {}
 
@@ -355,7 +355,11 @@ client.on('interactionCreate', async (interaction) => {
               if (ok) { played = true; break; }
             } catch (e) { console.error('playNow threw', e); }
           }
-          if (!played) await safeReply(interaction, { content: '❌ Не удалось воспроизвести выбранный трек и альтернативы.', ephemeral: true });
+          if (!played) {
+            // Update the in-channel control message with error if possible
+            try { await updateControlMessageWithError(guild.id, client, '❌ Не удалось воспроизвести выбранный трек и альтернативы.'); } catch (e) {}
+            try { await safeReply(interaction, { content: '❌ Не удалось воспроизвести выбранный трек и альтернативы.', ephemeral: true }); } catch (e) {}
+          }
           delete global._musicSearchCache[searchId];
           return;
         } catch (e) {
@@ -390,7 +394,7 @@ client.on('interactionCreate', async (interaction) => {
             const controlChannelId = '1443194196172476636';
             const controlCh = await client.channels.fetch(controlChannelId).catch(() => null);
             if (controlCh && controlCh.guild && String(controlCh.guild.id) === String(guild.id)) {
-              try { await ensureMusicControlPanel(controlCh); } catch (e) { console.warn('ensureMusicControlPanel failed', e && e.message); }
+              try { await ensureMusicControlPanel(controlCh, cache.userId); } catch (e) { console.warn('ensureMusicControlPanel failed', e && e.message); }
             }
           } catch (e) {}
 
@@ -418,7 +422,10 @@ client.on('interactionCreate', async (interaction) => {
               if (firstPlayed) await musicPlayer.addToQueue(guild, query).catch(e => console.error('addToQueue error', e));
             }
           }
-          if (!firstPlayed) await safeReply(interaction, { content: '❌ Не удалось воспроизвести выбранный трек(и).', ephemeral: true });
+          if (!firstPlayed) {
+            try { await updateControlMessageWithError(guild.id, client, '❌ Не удалось воспроизвести выбранный трек(и).'); } catch (e) {}
+            try { await safeReply(interaction, { content: '❌ Не удалось воспроизвести выбранный трек(и).', ephemeral: true }); } catch (e) {}
+          }
           delete global._musicSearchCache[searchId];
           return;
         } catch (e) {

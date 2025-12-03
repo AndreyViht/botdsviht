@@ -15,8 +15,9 @@ const musicEmbeds = require('../music-interface/musicEmbeds');
 const YTDLP_BIN = process.env.YTDLP_PATH || process.env.YTDLP_BIN || 'yt-dlp';
 const FFMPEG_BIN = process.env.FFMPEG_PATH || process.env.FFMPEG_BIN || 'ffmpeg';
 
-// Log channel for music occupancy and notifications
-const LOG_CHANNEL_ID = '1445119290444480684';
+// Log channel for music occupancy and notifications (read from config)
+const config = require('../config');
+const LOG_CHANNEL_ID = config.musicLogChannelId || '1445848232965181500';
 
 // single in-memory state map
 const players = new Map();
@@ -988,7 +989,17 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId, pla
                   } catch (e) {}
                 })();
               } else {
-                try { if (textChannel && textChannel.send) textChannel.send('❌ Не удалось воспроизвести трек (короткий прогон). Попробуйте другую ссылку.').catch(()=>{}); } catch (e) {}
+                try {
+                  (async () => {
+                    try {
+                      const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+                      const msg = '❌ Не удалось воспроизвести трек (короткий прогон). Попробуйте другую ссылку.';
+                      let updated = false;
+                      if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msg).catch(() => false);
+                      if (!updated && textChannel && textChannel.send) await textChannel.send(msg).catch(()=>{});
+                    } catch (e) {}
+                  })();
+                } catch (e) {}
               }
             } catch (e) { /* ignore */ }
             try { state.player.removeListener('stateChange', onShortPlayStateChange); } catch (e) {}
@@ -1090,7 +1101,15 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId, pla
     } catch (e) { /* ignore */ }
 
     return true;
-  } catch (e) { console.error('playNow error', e && e.message ? e.message : e); if (textChannel && textChannel.send) await textChannel.send('❌ Ошибка при воспроизведении.'); return false; }
+  } catch (e) { console.error('playNow error', e && e.message ? e.message : e);
+    try {
+      const clientForPanel = (players.get(guild.id) && players.get(guild.id)._client) ? players.get(guild.id)._client : (guild && guild.client ? guild.client : null);
+      const msg = '❌ Ошибка при воспроизведении.';
+      let updated = false;
+      if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msg).catch(() => false);
+      if (!updated && textChannel && textChannel.send) await textChannel.send(msg).catch(()=>{});
+    } catch (ee) { /* ignore */ }
+    return false; }
 }
 
 async function addToQueue(guild, query) {
@@ -1343,7 +1362,15 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) 
     });
     
     return true;
-  } catch (e) { console.error('playRadio error', e && e.message); if (textChannel && textChannel.send) await textChannel.send('❌ Ошибка при воспроизведении радио.'); return false; }
+  } catch (e) { console.error('playRadio error', e && e.message);
+    try {
+      const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+      const msg = '❌ Ошибка при воспроизведении радио.';
+      let updated = false;
+      if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msg).catch(() => false);
+      if (!updated && textChannel && textChannel.send) await textChannel.send(msg).catch(()=>{});
+    } catch (ee) { /* ignore */ }
+    return false; }
 }
 
 // ==================== ИСТОРИЯ, ИЗБРАННОЕ, ПЛЕЙЛИСТЫ ====================
@@ -1591,9 +1618,13 @@ async function playPlaylist(guild, voiceChannel, guildId, userId, playlistId, te
     const playlists = await getUserPersonalPlaylists(guildId, userId);
     const playlist = playlists[playlistId];
     if (!playlist || !playlist.tracks || playlist.tracks.length === 0) {
-      if (textChannel && textChannel.send) {
-        await textChannel.send('❌ Плейлист пуст или не найден.');
-      }
+      try {
+        const clientForPanel = (guild && guild.client) ? guild.client : null;
+        const msg = '❌ Плейлист пуст или не найден.';
+        let updated = false;
+        if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msg).catch(() => false);
+        if (!updated && textChannel && textChannel.send) await textChannel.send(msg).catch(()=>{});
+      } catch (e) { /* ignore */ }
       return false;
     }
     let played = false;
@@ -1606,15 +1637,25 @@ async function playPlaylist(guild, voiceChannel, guildId, userId, playlistId, te
         await addToQueue(guild, track.url || track.title);
       }
     }
-    if (played && textChannel && textChannel.send) {
-      await textChannel.send(`✅ Запущен плейлист **${playlist.name}** (${playlist.tracks.length} песен)`);
+    if (played) {
+      try {
+        const clientForPanel = (guild && guild.client) ? guild.client : null;
+        const msg = `✅ Запущен плейлист **${playlist.name}** (${playlist.tracks.length} песен)`;
+        let updated = false;
+        if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msg).catch(() => false);
+        if (!updated && textChannel && textChannel.send) await textChannel.send(msg).catch(()=>{});
+      } catch (e) { /* ignore */ }
     }
     return played;
   } catch (e) {
-    console.error('playPlaylist error:', e.message);
-    if (textChannel && textChannel.send) {
-      await textChannel.send('❌ Ошибка при запуске плейлиста.');
-    }
+    console.error('playPlaylist error:', e && e.message ? e.message : e);
+    try {
+      const clientForPanel = (guild && guild.client) ? guild.client : null;
+      const msg = '❌ Ошибка при запуске плейлиста.';
+      let updated = false;
+      if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msg).catch(() => false);
+      if (!updated && textChannel && textChannel.send) await textChannel.send(msg).catch(()=>{});
+    } catch (ee) {}
     return false;
   }
 }

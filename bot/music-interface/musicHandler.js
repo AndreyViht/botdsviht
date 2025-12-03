@@ -12,9 +12,9 @@ const db = require('../libs/db');
 
 // Status channel where the bot posts who occupies the music bot
 const STATUS_CHANNEL_ID = '1441896031531827202';
-// Channel where we post logs about who occupied the player
-const LOG_CHANNEL_ID = '1445119290444480684';
+// Channel where we post logs about who occupied the player (from config)
 const config = require('../config');
+const LOG_CHANNEL_ID = config.musicLogChannelId || '1445848232965181500';
 const ADMIN_ROLE_ID = (config.adminRoles && config.adminRoles.length > 0) ? config.adminRoles[0] : '1436485697392607303';
 
 // ===== HELPERS =====
@@ -124,7 +124,7 @@ async function _updateMainControlMessage(guildId, client, embeds, components) {
 }
 
 // Ensure there is a music control message for the guild/channel with a single register button
-async function ensureMusicControlPanel(channel) {
+async function ensureMusicControlPanel(channel, ownerId = null) {
   try {
     if (!channel || !channel.guild) return;
     const guildId = channel.guild.id;
@@ -134,20 +134,49 @@ async function ensureMusicControlPanel(channel) {
     const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary));
     if (!rec || !rec.channelId || !rec.messageId) {
       const posted = await channel.send({ embeds: [embed], components: [row] }).catch(() => null);
-      if (posted) await db.set(key, { channelId: channel.id, messageId: posted.id }).catch(()=>{});
+      if (posted) {
+        const toSave = { channelId: channel.id, messageId: posted.id };
+        if (ownerId) toSave.owner = String(ownerId);
+        await db.set(key, toSave).catch(()=>{});
+      }
       return;
     }
     const ch = channel;
     const msg = await ch.messages.fetch(rec.messageId).catch(() => null);
     if (!msg) {
       const posted = await ch.send({ embeds: [embed], components: [row] }).catch(() => null);
-      if (posted) await db.set(key, { channelId: channel.id, messageId: posted.id }).catch(()=>{});
+      if (posted) {
+        const toSave = { channelId: channel.id, messageId: posted.id };
+        if (rec && rec.owner) toSave.owner = rec.owner;
+        if (ownerId) toSave.owner = String(ownerId);
+        await db.set(key, toSave).catch(()=>{});
+      }
     } else {
       if (!rec.owner) {
         await msg.edit({ embeds: [embed], components: [row] }).catch(()=>{});
       }
     }
   } catch (e) { console.error('ensureMusicControlPanel error', e); }
+}
+
+// Update the main control message with an error embed (public-facing)
+async function updateControlMessageWithError(guildId, client, content) {
+  try {
+    const key = `musicControl_${guildId}`;
+    const rec = db.get(key) || {};
+    const embed = new EmbedBuilder().setTitle(content).setColor(0xFF5252);
+    // Build fallback components
+    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary));
+    // If there's an owner, show owner quick controls instead
+    if (rec && rec.owner) {
+      const ownerRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('music_release').setLabel('Остановить бота').setStyle(ButtonStyle.Danger)
+      );
+      try { await _updateMainControlMessage(guildId, client, [embed], [ownerRow]); return true; } catch (e) {}
+    }
+    try { await _updateMainControlMessage(guildId, client, [embed], [row]); return true; } catch (e) { console.warn('updateControlMessageWithError failed', e && e.message); return false; }
+  } catch (e) { console.error('updateControlMessageWithError error', e); return false; }
 }
 
 // ===== MAIN HANDLER =====
@@ -770,5 +799,7 @@ function getMusicButtonHandler() {
 module.exports = {
   getMusicButtonHandler,
   handleMusicButton,
-  ensureMusicControlPanel
+  ensureMusicControlPanel,
+  _updateMainControlMessage,
+  updateControlMessageWithError
 };

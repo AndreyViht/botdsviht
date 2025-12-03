@@ -393,7 +393,7 @@ async function getStreamFromYtDlpPipe(url, state) {
   });
 }
 
-async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
+async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId, playOptions = {}) {
   try {
     const state = ensureState(guild.id);
     // Clear the stop flag when starting new playback
@@ -505,6 +505,15 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
         const candidateTitle = (typeof candidate === 'object' && candidate.title) ? candidate.title : null;
         attempted.push(candidateUrl);
         const detail = { candidate: candidateUrl, title: candidateTitle, attempts: [] };
+          // If caller requested to skip certain resolved URLs (retry flow), honor that
+          try {
+            if (playOptions && Array.isArray(playOptions.skipResolved) && playOptions.skipResolved.includes(candidateUrl)) {
+              detail.attempts.push({ method: 'skip', ok: false, reason: 'skipped by retry options' });
+              attemptDetails.push(detail);
+              console.log('Skipping candidate because it was previously tried:', candidateUrl.substring(0, 80));
+              continue;
+            }
+          } catch (e) { /* ignore */ }
 
         // 1) Try play-dl FIRST (most reliable against YouTube blocking)
         if (!resource && playdl) {
@@ -801,8 +810,67 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId) {
     const displayTitle = resolvedTitle || (resolvedUrl && typeof resolvedUrl === 'string' ? resolvedUrl : (typeof url === 'string' ? url : 'Музыка'));
     state.current = { url: resolvedUrl || (typeof url === 'string' ? url : null), title: displayTitle, owner: userId ? String(userId) : null, type: 'music' };
 
+    // Short-play monitor: if playback stops/pauses within MIN_GOOD_PLAY_MS, consider it a failure and retry
+    try {
+      const MIN_GOOD_PLAY_MS = parseInt(process.env.MIN_GOOD_PLAY_MS || '7000', 10) || 7000;
+      let playedSuccessfully = false;
+      let goodTimer = null;
+
+      const onShortPlayStateChange = (oldState, newState) => {
+        try {
+          if (playedSuccessfully) return;
+          const s = newState && newState.status ? newState.status : null;
+          if (!s) return;
+          if (s === AudioPlayerStatus.Idle || s === AudioPlayerStatus.AutoPaused || s === AudioPlayerStatus.Paused) {
+            console.warn('Short playback detected for', (resolvedUrl || '').toString().substring(0,120));
+            try { _killStateProcs(state); } catch (e) {}
+            try { state.player.stop(); } catch (e) {}
+
+            try {
+              const attempts = (playOptions && playOptions.attemptCount) ? playOptions.attemptCount : 0;
+              const MAX_RETRIES = 3;
+              if (attempts < MAX_RETRIES) {
+                state._inRetry = true;
+                const skips = Array.isArray(playOptions && playOptions.skipResolved) ? [...playOptions.skipResolved] : [];
+                if (resolvedUrl) skips.push(resolvedUrl);
+                const nextOptions = { skipResolved: skips, attemptCount: attempts + 1 };
+                (async () => {
+                  try {
+                    console.log('Retrying playback (attempt', nextOptions.attemptCount, ') skipping', skips.join(','));
+                    await playNow(guild, voiceChannel, queryOrUrl, textChannel, userId, nextOptions).catch(() => {});
+                  } catch (e) {}
+                })();
+              } else {
+                try { if (textChannel && textChannel.send) textChannel.send('❌ Не удалось воспроизвести трек (короткий прогон). Попробуйте другую ссылку.').catch(()=>{}); } catch (e) {}
+              }
+            } catch (e) { /* ignore */ }
+            try { state.player.removeListener('stateChange', onShortPlayStateChange); } catch (e) {}
+            try { if (goodTimer) { clearTimeout(goodTimer); goodTimer = null; } } catch (e) {}
+          }
+        } catch (e) { /* ignore */ }
+      };
+
+      state.player.once(AudioPlayerStatus.Playing, () => {
+        try {
+          goodTimer = setTimeout(() => {
+            playedSuccessfully = true;
+            try { state.player.removeListener('stateChange', onShortPlayStateChange); } catch (e) {}
+            try { if (goodTimer) { clearTimeout(goodTimer); goodTimer = null; } } catch (e) {}
+          }, MIN_GOOD_PLAY_MS);
+        } catch (e) {}
+      });
+
+      state.player.on('stateChange', onShortPlayStateChange);
+    } catch (e) { /* ignore monitor failures */ }
+
     state.player.once(AudioPlayerStatus.Idle, async () => {
       state.playing = false;
+      // If we are in a retry flow, suppress normal idle handling (queue advance, release-after)
+      if (state._inRetry) {
+        state._inRetry = false;
+        state.current = null;
+        return;
+      }
       // If a release-after request exists, clear owner and notify requester
       try {
         const releaseAfter = db.get(`musicReleaseAfter_${guild.id}`) || null;

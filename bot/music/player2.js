@@ -498,6 +498,8 @@ async function getStreamFromYtDlpPipe(url, state) {
 async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId, playOptions = {}) {
   try {
     const state = ensureState(guild.id);
+    // keep a reference to client for control message updates
+    try { if (guild && guild.client) state._client = guild.client; } catch (e) {}
     // Clear the stop flag when starting new playback
     state._userRequestedStop = false;
 

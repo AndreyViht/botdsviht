@@ -334,7 +334,28 @@ client.on('interactionCreate', async (interaction) => {
           }
           const query = candidate.url || candidate.title || candidate;
           await safeReply(interaction, { content: `🎵 Начинаю воспроизведение "${(candidate.title || '').slice(0, 50)}"...`, ephemeral: true });
-          await musicPlayer.playNow(guild, voiceChannel, query, interaction.channel, cache.userId).catch(e => console.error('playNow error', e));
+          // Ensure control panel exists in desired channel (server control message)
+          try {
+            const controlChannelId = '1443194196172476636';
+            const controlCh = await client.channels.fetch(controlChannelId).catch(() => null);
+            if (controlCh && controlCh.guild && String(controlCh.guild.id) === String(guild.id)) {
+              try { await ensureMusicControlPanel(controlCh); } catch (e) { console.warn('ensureMusicControlPanel failed', e && e.message); }
+            }
+          } catch (e) {}
+
+          // Try playing this candidate; if it fails, try next candidates from cache
+          let played = false;
+          const candidatesList = cache.candidates || [];
+          for (let tryIdx = trackIdx; tryIdx < candidatesList.length; tryIdx++) {
+            const cand = candidatesList[tryIdx];
+            if (!cand) continue;
+            const q = cand.url || cand.title || cand;
+            try {
+              const ok = await musicPlayer.playNow(guild, voiceChannel, q, interaction.channel, cache.userId).catch(err => { console.error('playNow error', err); return false; });
+              if (ok) { played = true; break; }
+            } catch (e) { console.error('playNow threw', e); }
+          }
+          if (!played) await safeReply(interaction, { content: '❌ Не удалось воспроизвести выбранный трек и альтернативы.', ephemeral: true });
           delete global._musicSearchCache[searchId];
           return;
         } catch (e) {
@@ -363,21 +384,41 @@ client.on('interactionCreate', async (interaction) => {
             return;
           }
           await safeReply(interaction, { content: `🎵 Начинаю воспроизведение ${selectedIndices.length} трека(ов)...`, ephemeral: true });
-          
-          // Add all selected tracks to queue and play first
+
+          // Ensure control panel exists in desired channel
+          try {
+            const controlChannelId = '1443194196172476636';
+            const controlCh = await client.channels.fetch(controlChannelId).catch(() => null);
+            if (controlCh && controlCh.guild && String(controlCh.guild.id) === String(guild.id)) {
+              try { await ensureMusicControlPanel(controlCh); } catch (e) { console.warn('ensureMusicControlPanel failed', e && e.message); }
+            }
+          } catch (e) {}
+
+          // Add all selected tracks to queue and play first; if first fails try next selected
+          let firstPlayed = false;
           for (let i = 0; i < selectedIndices.length; i++) {
             const idx = selectedIndices[i];
             const candidate = cache.candidates[idx];
             if (!candidate) continue;
             const query = candidate.url || candidate.title || candidate;
             if (i === 0) {
-              // Play first one immediately
-              await musicPlayer.playNow(guild, voiceChannel, query, interaction.channel, cache.userId).catch(e => console.error('playNow error', e));
+              // Try first, if it fails try subsequent selected indices
+              for (let k = 0; k < selectedIndices.length; k++) {
+                const candIdx = selectedIndices[k];
+                const cand = cache.candidates[candIdx];
+                if (!cand) continue;
+                const q = cand.url || cand.title || cand;
+                try {
+                  const ok = await musicPlayer.playNow(guild, voiceChannel, q, interaction.channel, cache.userId).catch(err => { console.error('playNow error', err); return false; });
+                  if (ok) { firstPlayed = true; break; }
+                } catch (e) { console.error('playNow threw', e); }
+              }
             } else {
-              // Queue rest
-              await musicPlayer.addToQueue(guild, query).catch(e => console.error('addToQueue error', e));
+              // Queue rest (avoid queuing if first didn't play)
+              if (firstPlayed) await musicPlayer.addToQueue(guild, query).catch(e => console.error('addToQueue error', e));
             }
           }
+          if (!firstPlayed) await safeReply(interaction, { content: '❌ Не удалось воспроизвести выбранный трек(и).', ephemeral: true });
           delete global._musicSearchCache[searchId];
           return;
         } catch (e) {

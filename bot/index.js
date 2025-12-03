@@ -170,9 +170,84 @@ client.on('interactionCreate', async (interaction) => {
         try { await handleMusicButton(interaction); } catch (err) { console.error('Music button error', err); await safeReply(interaction, { content: 'Ошибка при обработке кнопки музыки.', ephemeral: true }); }
         return;
       }
+      // Music search button selection
+      if (interaction.customId && interaction.customId.startsWith('music_search_btn_')) {
+        try {
+          const parts = interaction.customId.split('_');
+          const searchId = [parts[3], parts[4]].join('_'); // reconstruct searchId
+          const trackIdx = parseInt(parts[5], 10);
+          const cache = global._musicSearchCache && global._musicSearchCache[searchId];
+          if (!cache) {
+            await safeReply(interaction, { content: '❌ Поиск истёк. Попробуйте ещё раз.', ephemeral: true });
+            return;
+          }
+          const candidate = cache.candidates[trackIdx];
+          if (!candidate) {
+            await safeReply(interaction, { content: '❌ Трек не найден.', ephemeral: true });
+            return;
+          }
+          const guild = interaction.guild || (client && await client.guilds.fetch(cache.guildId).catch(() => null));
+          const voiceChannel = guild && await guild.channels.fetch(cache.voiceChannelId).catch(() => null);
+          if (!guild || !voiceChannel) {
+            await safeReply(interaction, { content: '❌ Не удалось найти сервер или голосовой канал.', ephemeral: true });
+            return;
+          }
+          const query = candidate.url || candidate.title || candidate;
+          await safeReply(interaction, { content: `🎵 Начинаю воспроизведение "${(candidate.title || '').slice(0, 50)}"...`, ephemeral: true });
+          await musicPlayer.playNow(guild, voiceChannel, query, interaction.channel, cache.userId).catch(e => console.error('playNow error', e));
+          delete global._musicSearchCache[searchId];
+          return;
+        } catch (e) {
+          console.error('music search button error', e);
+          await safeReply(interaction, { content: '❌ Ошибка при выборе трека.', ephemeral: true });
+        }
+        return;
+      }
       return;
     }
-    if (interaction.isModalSubmit()) {
+    if (interaction.isStringSelectMenu && interaction.isStringSelectMenu()) {
+      // Handle music search select menu
+      if (interaction.customId && interaction.customId.startsWith('music_search_select_')) {
+        try {
+          const searchId = interaction.customId.split('music_search_select_')[1];
+          const cache = global._musicSearchCache && global._musicSearchCache[searchId];
+          if (!cache) {
+            await safeReply(interaction, { content: '❌ Поиск истёк. Попробуйте ещё раз.', ephemeral: true });
+            return;
+          }
+          const selectedIndices = interaction.values.map(v => parseInt(v, 10));
+          const guild = interaction.guild || (client && await client.guilds.fetch(cache.guildId).catch(() => null));
+          const voiceChannel = guild && await guild.channels.fetch(cache.voiceChannelId).catch(() => null);
+          if (!guild || !voiceChannel) {
+            await safeReply(interaction, { content: '❌ Не удалось найти сервер или голосовой канал.', ephemeral: true });
+            return;
+          }
+          await safeReply(interaction, { content: `🎵 Начинаю воспроизведение ${selectedIndices.length} трека(ов)...`, ephemeral: true });
+          
+          // Add all selected tracks to queue and play first
+          for (let i = 0; i < selectedIndices.length; i++) {
+            const idx = selectedIndices[i];
+            const candidate = cache.candidates[idx];
+            if (!candidate) continue;
+            const query = candidate.url || candidate.title || candidate;
+            if (i === 0) {
+              // Play first one immediately
+              await musicPlayer.playNow(guild, voiceChannel, query, interaction.channel, cache.userId).catch(e => console.error('playNow error', e));
+            } else {
+              // Queue rest
+              await musicPlayer.addToQueue(guild, query).catch(e => console.error('addToQueue error', e));
+            }
+          }
+          delete global._musicSearchCache[searchId];
+          return;
+        } catch (e) {
+          console.error('music search select error', e);
+          await safeReply(interaction, { content: '❌ Ошибка при выборе трека.', ephemeral: true });
+        }
+        return;
+      }
+    }
+    if (interaction.isButton()) {
       if (interaction.customId === 'support_modal') {
         try {
           const subject = interaction.fields.getTextInputValue('subject').slice(0,60);
@@ -242,9 +317,81 @@ client.on('interactionCreate', async (interaction) => {
             await safeReply(interaction, { content: '❌ Вы не в голосовом канале.', ephemeral: true });
             return;
           }
-          // Let musicPlayer.playNow handle all updates via updateControlMessageWithError
-          await safeReply(interaction, { content: `🔎 Ищу песню "${songName}"...`, ephemeral: true });
-          await musicPlayer.playNow(guild, voiceChannel, songName, interaction.channel, interaction.user.id).catch(async (e) => { console.error('custom music search error', e); });
+          // Show searching message
+          await safeReply(interaction, { content: `🔎 Ищу варианты для "${songName}"...`, ephemeral: true });
+          
+          // Search for candidates
+          const searchResults = await musicPlayer.findYouTubeUrl(songName).catch(() => null);
+          if (!searchResults || !searchResults.candidates || searchResults.candidates.length === 0) {
+            try { await interaction.followUp({ content: `❌ Не найдено вариантов для "${songName}". Попробуйте другой поиск.`, ephemeral: true }); } catch (e) {}
+            return;
+          }
+          
+          const candidates = searchResults.candidates.slice(0, 10); // limit to 10 options
+          const searchId = `search_${Date.now()}_${interaction.user.id}`;
+          
+          // Store search results temporarily in interaction user's data (we'll reference by customId)
+          // Create select menu or buttons for choosing
+          let components = [];
+          
+          // If we have select menu support (limit 25 options), use that
+          if (candidates.length <= 25) {
+            const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
+            const select = new StringSelectMenuBuilder()
+              .setCustomId(`music_search_select_${searchId}`)
+              .setPlaceholder('Выберите трек')
+              .setMinValues(1)
+              .setMaxValues(Math.min(candidates.length, 5)); // Allow multi-select up to 5
+            
+            for (let i = 0; i < candidates.length; i++) {
+              const c = candidates[i];
+              const label = (c.title || c.url || '').slice(0, 100);
+              select.addOptions(
+                new StringSelectMenuOptionBuilder()
+                  .setLabel(label)
+                  .setValue(`${i}`)
+                  .setDescription(`[Вариант ${i+1}]`)
+              );
+            }
+            components.push(new ActionRowBuilder().addComponents(select));
+          } else {
+            // Fallback to numbered buttons (1️⃣, 2️⃣, etc.)
+            const buttons = [];
+            for (let i = 0; i < Math.min(candidates.length, 10); i++) {
+              const emoji = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'][i];
+              buttons.push(new ButtonBuilder()
+                .setCustomId(`music_search_btn_${searchId}_${i}`)
+                .setLabel(`${i+1}. ${(candidates[i].title || candidates[i].url || '').slice(0,20)}...`)
+                .setStyle(ButtonStyle.Secondary)
+              );
+            }
+            for (let i = 0; i < buttons.length; i += 5) {
+              components.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+            }
+          }
+          
+          // Store candidates temporarily (in memory, with timeout cleanup)
+          if (!global._musicSearchCache) global._musicSearchCache = {};
+          global._musicSearchCache[searchId] = { candidates, guildId: guild.id, voiceChannelId: voiceChannel.id, userId: interaction.user.id, timestamp: Date.now() };
+          setTimeout(() => { delete global._musicSearchCache[searchId]; }, 60000); // Clear after 60s
+          
+          // Show results
+          const resultEmbed = new EmbedBuilder()
+            .setTitle('🎵 Результаты поиска')
+            .setColor(0x7289DA)
+            .setDescription(`По запросу "${songName}" найдено ${candidates.length} результатов. Выберите трек(и):`)
+            .addFields(candidates.slice(0, 5).map((c, i) => ({
+              name: `${i+1}. ${(c.title || c.url).slice(0,50)}`,
+              value: '—',
+              inline: false
+            })));
+          
+          try { 
+            await interaction.followUp({ embeds: [resultEmbed], components, ephemeral: true }); 
+          } catch (e) { 
+            console.warn('followUp failed', e); 
+            try { await interaction.channel.send({ embeds: [resultEmbed], components }); } catch (e2) {}
+          }
           return;
         } catch (e) { console.error('music_search_modal submit error', e); return await safeReply(interaction, { content: 'Ошибка при поиске песни.', ephemeral: true }); }
       }

@@ -1156,4 +1156,4 @@ async function playRadio(guild, voiceChannel, radioStream, textChannel, userId) 
   } catch (e) { console.error('playRadio error', e && e.message); if (textChannel && textChannel.send) await textChannel.send('❌ Ошибка при воспроизведении радио.'); return false; }
 }
 
-module.exports = { playNow, playRadio, addToQueue, stop, skip, isPlaying, changeVolume };
+module.exports = { playNow, playRadio, addToQueue, stop, skip, isPlaying, changeVolume, findYouTubeUrl };

@@ -237,15 +237,16 @@ async function handleMusicButton(interaction) {
       try {
         if (!guild) return await interaction.reply({ content: '❌ Ошибка: не удалось определить сервер.', ephemeral: true });
         const rec = await _getControlRecForGuild(guild.id);
-        if (rec && rec.owner) {
-          // Offer a request-free button to politely ask the owner to release
+        // Check if plater is occupied and if it's not by the current user
+        if (rec && rec.owner && String(rec.owner) !== String(user.id)) {
+          // Someone else owns it — offer a request button
           const requestRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`music_request_free_${guild.id}_${rec.owner}_${user.id}`).setLabel('Попросить освободить').setStyle(ButtonStyle.Primary)
           );
-          try { await interaction.reply({ content: '❌ Плеер уже занят другим пользователем.', ephemeral: true, components: [requestRow] }); } catch (e) { try { await interaction.followUp({ content: '❌ Плеер уже занят другим пользователем.', ephemeral: true, components: [requestRow] }); } catch(ignore){} }
+          try { await interaction.reply({ content: `❌ Плеер уже занят пользователем <@${rec.owner}>. Попросите его освободить или попробуйте позже.`, ephemeral: true, components: [requestRow] }); } catch (e) { try { await interaction.followUp({ content: `❌ Плеер уже занят пользователем <@${rec.owner}>. Попросите его освободить или попробуйте позже.`, ephemeral: true, components: [requestRow] }); } catch(ignore){} }
           return;
         }
-        // Set owner
+        // If we're here, either no owner or it's the current user — set/confirm ownership
         await _setMusicOwner(guild.id, user.id);
         // Log who occupied the player
         try {

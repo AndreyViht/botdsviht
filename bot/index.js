@@ -296,6 +296,131 @@ client.on('guildMemberAdd', async (member) => {
   } catch (e) { console.warn('scheduleReminders failed', e && e.message); }
 })();
 
+// --- Activity logging to admin channel ---
+const ACTIVITY_LOG_CHANNEL = '1441896031531827202';
+
+async function findRecentAuditEntry(guild, predicate, windowMs = 10000) {
+  try {
+    const logs = await guild.fetchAuditLogs({ limit: 30 }).catch(() => null);
+    if (!logs || !logs.entries) return null;
+    const now = Date.now();
+    for (const entry of logs.entries.values()) {
+      try {
+        const created = entry.createdAt ? entry.createdAt.getTime() : (entry.createdTimestamp || 0);
+        if (now - created > windowMs) continue;
+        if (typeof predicate === 'function' && predicate(entry)) return entry;
+      } catch (e) {}
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function sendActivityEmbed(guild, embed) {
+  try {
+    const ch = await client.channels.fetch(ACTIVITY_LOG_CHANNEL).catch(() => null);
+    if (ch && ch.isTextBased && ch.isTextBased()) {
+      await ch.send({ embeds: [embed] }).catch(() => null);
+    }
+  } catch (e) { console.warn('sendActivityEmbed failed', e && e.message); }
+}
+
+// Voice state: detect server mute/unmute and forced disconnects (kicks)
+client.on('voiceStateUpdate', async (oldState, newState) => {
+  try {
+    const guild = oldState.guild || newState.guild;
+    if (!guild) return;
+    const member = newState.member || oldState.member;
+
+    // Server mute/unmute
+    try {
+      if (oldState.serverMute !== newState.serverMute) {
+        const action = newState.serverMute ? 'Выключил микрофон (заглушил)' : 'Включил микрофон (разглушил)';
+        const audit = await findRecentAuditEntry(guild, e => String(e.targetId) === String(member.id));
+        const by = audit && audit.executor ? `<@${audit.executor.id}>` : 'Неизвестно';
+        const embed = new EmbedBuilder()
+          .setTitle('🔇 Изменение микрофона')
+          .setColor(newState.serverMute ? 0xFF5252 : 0x4CAF50)
+          .setDescription(`${by} — ${action} у пользователя <@${member.id}>`)
+          .addFields(
+            { name: 'Сервер', value: `${guild.name}`, inline: true },
+            { name: 'Пользователь', value: `<@${member.id}>`, inline: true }
+          )
+          .setTimestamp();
+        await sendActivityEmbed(guild, embed);
+      }
+    } catch (e) {}
+
+    // Kicked/disconnected from voice (someone forced them out)
+    try {
+      if (oldState.channel && !newState.channel) {
+        // They left/moved out of voice. Try to find an audit entry that indicates a forced disconnect
+        const audit = await findRecentAuditEntry(guild, e => String(e.targetId) === String(member.id));
+        const by = audit && audit.executor ? `<@${audit.executor.id}>` : null;
+        const title = by ? '👢 Выгнан из голосового' : '🏃 Вышел из голосового';
+        const color = by ? 0xFF7043 : 0x607D8B;
+        const desc = by ? `${by} выгнал(а) <@${member.id}> из голосового канала ${oldState.channel ? `**${oldState.channel.name}**` : ''}` : `<@${member.id}> покинул(а) голосовой канал ${oldState.channel ? `**${oldState.channel.name}**` : ''}`;
+        const embed = new EmbedBuilder().setTitle(title).setColor(color).setDescription(desc).addFields(
+          { name: 'Сервер', value: `${guild.name}`, inline: true },
+          { name: 'Канал', value: oldState.channel ? `${oldState.channel.name}` : '—', inline: true }
+        ).setTimestamp();
+        await sendActivityEmbed(guild, embed);
+      }
+    } catch (e) {}
+  } catch (e) { console.error('voiceStateUpdate handler failed', e && e.message); }
+});
+
+// Nickname change logging
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+  try {
+    const guild = newMember.guild || oldMember.guild;
+    if (!guild) return;
+    const oldNick = oldMember.nickname || oldMember.displayName || '';
+    const newNick = newMember.nickname || newMember.displayName || '';
+    if (oldNick !== newNick) {
+      const audit = await findRecentAuditEntry(guild, e => String(e.targetId) === String(newMember.id));
+      const by = audit && audit.executor ? `<@${audit.executor.id}>` : 'Неизвестно';
+      const embed = new EmbedBuilder().setTitle('✏️ Изменение ника')
+        .setColor(0xFFC107)
+        .setDescription(`${by} изменил(а) ник пользователя <@${newMember.id}>`)
+        .addFields(
+          { name: 'Старый ник', value: oldNick || '—', inline: true },
+          { name: 'Новый ник', value: newNick || '—', inline: true }
+        )
+        .setTimestamp();
+      await sendActivityEmbed(guild, embed);
+    }
+  } catch (e) { console.error('guildMemberUpdate handler failed', e && e.message); }
+});
+
+// Message deletion logging
+client.on('messageDelete', async (message) => {
+  try {
+    if (!message || !message.guild) return;
+    const guild = message.guild;
+    const channel = message.channel;
+    const author = message.author;
+    // try to find an audit entry for a moderator deletion
+    const audit = await findRecentAuditEntry(guild, e => {
+      try {
+        // Some audit entries include extra.channel (deleted messages count), match by channel id
+        if (e.extra && e.extra.channel && String(e.extra.channel.id) === String(channel.id)) return true;
+        if (String(e.targetId) === String(author && author.id)) return true;
+      } catch (ee) {}
+      return false;
+    }, 15000);
+    const by = audit && audit.executor ? `<@${audit.executor.id}>` : (author ? `<@${author.id}> (сам)` : 'Неизвестно');
+    const content = message.content ? (message.content.length > 1000 ? message.content.slice(0,1000) + '…' : message.content) : (message.embeds && message.embeds.length ? '[embed]' : '[нет текста]');
+    const embed = new EmbedBuilder().setTitle('🗑️ Удалено сообщение')
+      .setColor(0x9E9E9E)
+      .addFields(
+        { name: 'Автор', value: author ? `<@${author.id}>` : 'Неизвестно', inline: true },
+        { name: 'Удалил', value: by, inline: true },
+        { name: 'Канал', value: channel ? `${channel.name}` : '—', inline: true },
+        { name: 'Содержимое', value: content }
+      ).setTimestamp();
+    await sendActivityEmbed(guild, embed);
+  } catch (e) { console.error('messageDelete handler failed', e && e.message); }
+});
 // Load user language preferences into client for quick access
 (async function loadUserLangs() {
   try {

@@ -209,6 +209,15 @@ async function updateControlMessageNowPlaying(guildId, client, title, currentMs,
       );
       components.push(ownerRow);
 
+      // Volume controls row
+      try {
+        const volRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('music_volume_down').setLabel('🔉 Тише').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('music_volume_up').setLabel('🔊 Громче').setStyle(ButtonStyle.Primary)
+        );
+        components.push(volRow);
+      } catch (e) { /* ignore */ }
+
       // Add playlist quick-actions: play / add current / delete (up to 5 per row)
       try {
         const pls = getPlaylists(guildId, ownerId) || {};

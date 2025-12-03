@@ -383,6 +383,73 @@ async function handleMusicButton(interaction) {
       return;
     }
 
+    // PAUSE / RESUME
+    if (customId === 'music_pause') {
+      try {
+        const ok = await musicPlayer.pause(guild).catch(() => null);
+        // Try to update control message embed preserving components
+        try {
+          const panelRec = db.get(`musicControl_${guild.id}`) || {};
+          if (panelRec && panelRec.channelId && panelRec.messageId) {
+            const ch = await client.channels.fetch(panelRec.channelId).catch(() => null);
+            const msg = ch ? await ch.messages.fetch(panelRec.messageId).catch(() => null) : null;
+            if (msg) {
+              const cur = await musicPlayer.getCurrentTrack(guild.id).catch(() => null);
+              const prog = await musicPlayer.getProgress(guild.id).catch(() => ({ elapsed: 0, duration: 0 }));
+              const embed = require('./musicEmbeds').createNowPlayingWithProgressEmbed((cur && cur.title) ? cur.title : '—', prog.elapsed || 0, prog.duration || 0);
+              await msg.edit({ embeds: [embed], components: msg.components }).catch(() => null);
+            }
+          }
+        } catch (e) {}
+        try { await interaction.reply({ content: ok ? '⏸ Пауза' : '⏯️ Состояние обновлено', ephemeral: true }); } catch (e) {}
+      } catch (e) { console.error('music_pause handler error', e); try { await interaction.reply({ content: 'Ошибка при паузе.', ephemeral: true }); } catch(ignore){} }
+      return;
+    }
+
+    // SKIP
+    if (customId === 'music_skip') {
+      try {
+        const ok = await musicPlayer.skip(guild).catch(() => null);
+        try { await interaction.reply({ content: '⏭ Трек пропущен.', ephemeral: true }); } catch (e) {}
+      } catch (e) { console.error('music_skip handler error', e); try { await interaction.reply({ content: 'Ошибка при пропуске.', ephemeral: true }); } catch(ignore){} }
+      return;
+    }
+
+    // ADD TO FAVORITES
+    if (customId === 'music_add_fav') {
+      try {
+        const cur = await musicPlayer.getCurrentTrack(guild.id).catch(() => null);
+        if (!cur) return await interaction.reply({ content: 'Нет текущего трека.', ephemeral: true });
+        const ok = await musicPlayer.addToFavorites(guild.id, user.id, cur).catch(() => false);
+        if (ok) await interaction.reply({ content: '❤️ Трек добавлен в избранное.', ephemeral: true }); else await interaction.reply({ content: '❌ Не удалось добавить в избранное.', ephemeral: true });
+      } catch (e) { console.error('music_add_fav handler error', e); try { await interaction.reply({ content: 'Ошибка при добавлении в избранное.', ephemeral: true }); } catch(ignore){} }
+      return;
+    }
+
+    // VOLUME UP / DOWN
+    if (customId === 'music_volume_up' || customId === 'music_volume_down') {
+      try {
+        const delta = customId === 'music_volume_up' ? 0.1 : -0.1;
+        const newVol = await musicPlayer.changeVolume(guild, delta).catch(() => null);
+        // Update control message embed preserving components
+        try {
+          const panelRec = db.get(`musicControl_${guild.id}`) || {};
+          if (panelRec && panelRec.channelId && panelRec.messageId) {
+            const ch = await client.channels.fetch(panelRec.channelId).catch(() => null);
+            const msg = ch ? await ch.messages.fetch(panelRec.messageId).catch(() => null) : null;
+            if (msg) {
+              const cur = await musicPlayer.getCurrentTrack(guild.id).catch(() => null);
+              const prog = await musicPlayer.getProgress(guild.id).catch(() => ({ elapsed: 0, duration: 0 }));
+              const embed = require('./musicEmbeds').createNowPlayingWithProgressEmbed((cur && cur.title) ? cur.title : '—', prog.elapsed || 0, prog.duration || 0);
+              await msg.edit({ embeds: [embed], components: msg.components }).catch(() => null);
+            }
+          }
+        } catch (e) {}
+        try { await interaction.reply({ content: `🔊 Громкость: ${newVol ? Math.round(newVol * 100) : '—'}%`, ephemeral: true }); } catch (e) {}
+      } catch (e) { console.error('music_volume handler error', e); try { await interaction.reply({ content: 'Ошибка при изменении громкости.', ephemeral: true }); } catch(ignore){} }
+      return;
+    }
+
     // MAIN MENU
     if (customId === 'music_menu') {
       const embed = createMusicMenuEmbed();

@@ -100,6 +100,19 @@ async function checkMessage(message, client) {
     const muteMs = unit === 'minute' ? timeVal * 60000 : (unit === 'second' ? timeVal * 1000 : timeVal * 60000);
 
     try {
+      // Сохраним и снимем текущие роли пользователя (кроме @everyone и самой роли Muted)
+      const currentRoles = member.roles.cache.filter(r => r.id !== member.guild.id && r.id !== (mutedRole.id)).map(r => r.id);
+      if (currentRoles.length > 0) {
+        try {
+          await member.roles.remove(currentRoles, 'Снятие ролей для автоматического мута').catch(() => null);
+        } catch (e) {
+          // игнорируем ошибки снятия ролей
+        }
+      }
+      // Отключаем из голосового при необходимости
+      try { if (member.voice && member.voice.channel) await member.voice.setChannel(null).catch(()=>null); } catch(e) {}
+
+      // Теперь выдаём роль Muted
       await member.roles.add(mutedRole, `Автоматический мьют за матерные слова: ${foundBadwords.slice(0, 3).join(', ')}${foundBadwords.length > 3 ? '...' : ''}`);
     } catch (e) {
       console.error('Failed to mute member:', e.message);
@@ -208,7 +221,7 @@ async function checkMessage(message, client) {
         reason: 'Автоматический мьют за мат',
         muteTime: new Date().toISOString(),
         unmuteTime: unmuteAt,
-        removedRoles: []
+        removedRoles: (member && member.roles && member.roles.cache) ? currentRoles : []
       };
       await db.set('mutes', mutes);
 
@@ -225,6 +238,13 @@ async function checkMessage(message, client) {
           // Remove mute role
           if (updatedMember.roles.cache.has(mutedRole.id)) {
             try { await updatedMember.roles.remove(mutedRole.id, 'Автоматическое снятие мьюта (время истекло)'); } catch (e) { console.warn('Failed to remove mute role during auto-unmute:', e.message); }
+          }
+          // Restore previously removed roles
+          if (entry.removedRoles && entry.removedRoles.length > 0) {
+            const toRestore = entry.removedRoles.filter(id => guild.roles.cache.has(id));
+            if (toRestore.length > 0) {
+              try { await updatedMember.roles.add(toRestore); } catch (e) { console.warn('Failed to restore roles after auto-unmute:', e.message); }
+            }
           }
           // Remove entry from DB
           delete stored[targetId];

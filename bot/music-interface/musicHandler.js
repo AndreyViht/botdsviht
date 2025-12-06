@@ -11,7 +11,7 @@ const activeRadios = new Map();
 const db = require('../libs/db');
 
 // Status channel where the bot posts who occupies the music bot
-const STATUS_CHANNEL_ID = '1441896031531827202';
+const STATUS_CHANNEL_ID = '1445848232965181500';
 // Channel where we post logs about who occupied the player (from config)
 const config = require('../config');
 const LOG_CHANNEL_ID = config.musicLogChannelId || '1445848232965181500';

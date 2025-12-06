@@ -12,7 +12,7 @@ module.exports = {
   async execute(interaction) {
     await db.ensureReady();
     const config = require('../config');
-    const LOG_CHANNEL_ID = '1445119290444480684';
+    const LOG_CHANNEL_ID = '1446798710511243354'; // Канал логов модерации
 
     const isAdmin = config.adminRoles.some(rid => interaction.member.roles.cache.has(rid));
     if (!isAdmin) {

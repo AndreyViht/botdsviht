@@ -639,8 +639,14 @@ client.on('guildMemberAdd', async (member) => {
 })();
 
 // --- Activity logging to specific channels ---
-const VOICE_LOG_CHANNEL = '1446796960697679953';       // Логи голоса: вход/выход/кик
-const COMMAND_LOG_CHANNEL = '1446796850471505973';   // Логи команд, ники, сообщения
+const COMMAND_LOG_CHANNEL = '1446801265219604530';     // Логи команд
+const VOICE_LOG_CHANNEL = '1446801072344662149';       // Логи голоса: вход/выход/кик
+const SUPPORT_CHANNEL_ID = '1446801072344662149';      // Канал поддержки
+const STATUS_CHANNEL_ID = '1445848232965181500';       // Статус плеера
+const NICK_CHANGE_LOG_CHANNEL = '1446800866630963233'; // Логи изменения ников
+const MODERATION_LOG_CHANNEL = '1446798710511243354';  // Логи модерации (бан, вар, мут)
+const MESSAGE_EDIT_LOG_CHANNEL = '1446796850471505973';// Логи редактирования сообщений
+const BADWORD_LOG_CHANNEL = '1446796960697679953';     // Логи матерных слов
 const MUSIC_LOG_CHANNEL = '1445848232965181500';       // Логи музыки
 
 async function findRecentAuditEntry(guild, predicate, windowMs = 10000) {
@@ -731,7 +737,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
           { name: 'Новый ник', value: newNick || '—', inline: true }
         )
         .setTimestamp();
-      await sendActivityEmbed(guild, embed, COMMAND_LOG_CHANNEL);
+      await sendActivityEmbed(guild, embed, NICK_CHANGE_LOG_CHANNEL);
     }
   } catch (e) { console.error('guildMemberUpdate handler failed', e && e.message); }
 });
@@ -762,7 +768,7 @@ client.on('messageDelete', async (message) => {
         { name: 'Канал', value: channel ? `${channel.name}` : '—', inline: true },
         { name: 'Содержимое', value: content }
       ).setTimestamp();
-    await sendActivityEmbed(guild, embed, COMMAND_LOG_CHANNEL);
+    await sendActivityEmbed(guild, embed, MESSAGE_EDIT_LOG_CHANNEL);
   } catch (e) { console.error('messageDelete handler failed', e && e.message); }
 });
 // Load user language preferences into client for quick access
@@ -812,6 +818,15 @@ client.on('messageCreate', async (message) => {
   try {
     if (message.author?.bot) return;
     if (!message.channel) return;
+    
+    // Проверка на матерные слова - работает на всех каналах
+    try {
+      const { checkMessage } = require('./moderation/badwordHandler');
+      await checkMessage(message, client);
+    } catch (e) {
+      console.warn('Badword check failed:', e && e.message ? e.message : e);
+    }
+    
     const ch = message.channel;
     const isThread = !!ch?.isThread && ch.isThread();
     const isAiMain = String(ch.id) === String(aiChatChannelId);

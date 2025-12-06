@@ -71,6 +71,17 @@ try {
 } catch (e) { /* optional */ }
 try { const { initAutomod } = require('./moderation/automod'); initAutomod(client); } catch (e) { /* ignore */ }
 // Interaction handler: commands, buttons, modals
+// Channel IDs for themed logs (defined early so handlers can use them)
+const COMMAND_LOG_CHANNEL = '1446801265219604530';     // Логи команд
+const VOICE_LOG_CHANNEL = '1446801072344662149';       // Логи голоса: вход/выход/кик
+const SUPPORT_CHANNEL_ID = '1446801072344662149';      // Канал поддержки
+const STATUS_CHANNEL_ID = '1445848232965181500';       // Статус плеера
+const NICK_CHANGE_LOG_CHANNEL = '1446800866630963233'; // Логи изменения ников
+const MODERATION_LOG_CHANNEL = '1446798710511243354';  // Логи модерации (бан, вар, мут)
+const MESSAGE_EDIT_LOG_CHANNEL = '1446796850471505973';// Логи редактирования сообщений
+const BADWORD_LOG_CHANNEL = '1446796960697679953';     // Логи матерных слов
+const MUSIC_LOG_CHANNEL = '1445848232965181500';       // Логи музыки
+
 client.on('interactionCreate', async (interaction) => {
   try {
     // attach helpers to interaction for commands to use if desired
@@ -79,14 +90,14 @@ client.on('interactionCreate', async (interaction) => {
       const command = client.commands.get(interaction.commandName);
       if (!command) return;
       
-      // Log command to channel 1445119290444480684
+      // Log command to configured command log channel
       try {
-        const logChannelId = '1445119290444480684';
+        const logChannelId = COMMAND_LOG_CHANNEL;
         const logChannel = interaction.client.channels.cache.get(logChannelId);
-        if (logChannel && logChannel.isTextBased()) {
+        if (logChannel && logChannel.isTextBased && logChannel.isTextBased()) {
           const user = interaction.user;
           const commandName = interaction.commandName;
-          await logChannel.send(`${user.toString()} использовал команду /${commandName}`);
+          await logChannel.send(`${user.toString()} использовал команду /${commandName}`).catch(() => null);
         }
       } catch (logErr) {
         console.error('Failed to log command:', logErr && logErr.message ? logErr.message : logErr);
@@ -638,16 +649,7 @@ client.on('guildMemberAdd', async (member) => {
   } catch (e) { console.warn('scheduleReminders failed', e && e.message); }
 })();
 
-// --- Activity logging to specific channels ---
-const COMMAND_LOG_CHANNEL = '1446801265219604530';     // Логи команд
-const VOICE_LOG_CHANNEL = '1446801072344662149';       // Логи голоса: вход/выход/кик
-const SUPPORT_CHANNEL_ID = '1446801072344662149';      // Канал поддержки
-const STATUS_CHANNEL_ID = '1445848232965181500';       // Статус плеера
-const NICK_CHANGE_LOG_CHANNEL = '1446800866630963233'; // Логи изменения ников
-const MODERATION_LOG_CHANNEL = '1446798710511243354';  // Логи модерации (бан, вар, мут)
-const MESSAGE_EDIT_LOG_CHANNEL = '1446796850471505973';// Логи редактирования сообщений
-const BADWORD_LOG_CHANNEL = '1446796960697679953';     // Логи матерных слов
-const MUSIC_LOG_CHANNEL = '1445848232965181500';       // Логи музыки
+// (Channel constants declared earlier)
 
 async function findRecentAuditEntry(guild, predicate, windowMs = 10000) {
   try {
@@ -749,6 +751,9 @@ client.on('messageDelete', async (message) => {
     const guild = message.guild;
     const channel = message.channel;
     const author = message.author;
+    // If the author was a bot, skip logging
+    if (author && author.bot) return;
+
     // try to find an audit entry for a moderator deletion
     const audit = await findRecentAuditEntry(guild, e => {
       try {
@@ -758,6 +763,8 @@ client.on('messageDelete', async (message) => {
       } catch (ee) {}
       return false;
     }, 15000);
+    // If audit shows the bot (this client) deleted the message (e.g. via a moderation/cleanup command), do not log
+    if (audit && audit.executor && String(audit.executor.id) === String(client.user.id)) return;
     const by = audit && audit.executor ? `<@${audit.executor.id}>` : (author ? `<@${author.id}> (сам)` : 'Неизвестно');
     const content = message.content ? (message.content.length > 1000 ? message.content.slice(0,1000) + '…' : message.content) : (message.embeds && message.embeds.length ? '[embed]' : '[нет текста]');
     const embed = new EmbedBuilder().setTitle('🗑️ Удалено сообщение')
@@ -954,22 +961,35 @@ client.once('ready', async () => {
   function getUptimeHours() {
     return Math.floor((Date.now() - botStartTime) / (1000 * 60 * 60));
   }
-  // Send startup report to status channel
-  const STATUS_CHANNEL_ID = '1441896031531827202';
+  // Send a polished startup embed into the command/log channel so staff see restarts
   try {
-    const statusChannel = await client.channels.fetch(STATUS_CHANNEL_ID).catch(() => null);
-    if (statusChannel) {
+    const logChannelId = COMMAND_LOG_CHANNEL;
+    const statusChannel = await client.channels.fetch(logChannelId).catch(() => null);
+    if (statusChannel && statusChannel.isTextBased && statusChannel.isTextBased()) {
       const { date, time } = formatDateTimeMSK(botStartTime);
       let version = 'unknown';
       try { version = (fs.readFileSync(path.join(__dirname, '..', 'VERSION'), 'utf-8') || '').trim() || version; } catch (e) {}
       let gitSha = 'unknown';
       try { const { execSync } = require('child_process'); gitSha = String(execSync('git rev-parse --short HEAD', { cwd: path.join(__dirname, '..'), timeout: 2000 })).trim(); } catch (e) {}
-      const msg = `✅ **Бот запущен**\n🕒 Время: ${time}\n📅 Дата: ${date} по МСК\n🔖 Версия: ${version}\n🔁 Commit: ${gitSha}`;
-      await statusChannel.send(msg).catch(() => null);
-      console.log('Startup status report posted to', STATUS_CHANNEL_ID, 'version', version, 'commit', gitSha);
+      const embed = new EmbedBuilder()
+        .setTitle('✅ Бот запущен')
+        .setColor(0x4CAF50)
+        .setThumbnail(client.user.displayAvatarURL({ size: 64 }))
+        .addFields(
+          { name: 'Бот', value: `${client.user.tag}`, inline: true },
+          { name: 'Дата (MSK)', value: `${date}`, inline: true },
+          { name: 'Время (MSK)', value: `${time}`, inline: true },
+          { name: 'Версия', value: `${version}`, inline: true },
+          { name: 'Commit', value: `${gitSha}`, inline: true },
+          { name: 'Серверов', value: `${client.guilds.cache.size}`, inline: true }
+        )
+        .setFooter({ text: 'Авто-уведомление о запуске' })
+        .setTimestamp();
+      await statusChannel.send({ embeds: [embed] }).catch(() => null);
+      console.log('Startup embed posted to', logChannelId, 'version', version, 'commit', gitSha);
     }
   } catch (e) {
-    console.warn('Failed to post startup status report:', e && e.message ? e.message : e);
+    console.warn('Failed to post startup embed:', e && e.message ? e.message : e);
   }
   // Startup reconciliation: restore active mutes and reschedule unmute timers
   try {

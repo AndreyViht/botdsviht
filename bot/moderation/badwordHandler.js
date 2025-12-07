@@ -130,32 +130,36 @@ async function handleBadwordMute(message, foundBadwords, client) {
 
   // Получаем данные нарушений пользователя
   const userViolations = db.get('userViolations') || {};
-  const userViolationsList = userViolations[userId] || [];
-  
-  // Добавляем новое нарушение
-  userViolationsList.push({
+  let userViolationsList = userViolations[userId] || [];
+
+  // Подсчитываем активные варны ДО добавления нового (последние 30 дней)
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const activeViolations = userViolationsList.filter(v => new Date(v.timestamp).getTime() > thirtyDaysAgo);
+  const currentViolationCount = activeViolations.length; // Сколько уже есть
+
+  // Теперь добавляем НОВОЕ нарушение
+  const newViolation = {
     type: 'badword',
     reason: foundBadwords.slice(0, 3).join(', '),
     timestamp: new Date().toISOString(),
-    severity: 'warning'
-  });
-
+    severity: currentViolationCount + 1 // Номер этого нарушения: 1, 2, 3, 4...
+  };
+  userViolationsList.push(newViolation);
+  userViolations[userId] = userViolationsList;
   await db.set('userViolations', userViolations);
 
-  // Подсчитываем активные варны (последние 30 дней)
-  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const activeViolations = userViolationsList.filter(v => new Date(v.timestamp).getTime() > thirtyDaysAgo);
-  const violationCount = activeViolations.length;
+  // Определяем время мута на основе НОВОГО числа нарушений
+  const nextViolationCount = currentViolationCount + 1; // После добавления нового
+  let muteMinutes = getProgressiveMuteDuration(nextViolationCount);
 
-  // Определяем время мута
-  let muteMinutes = getProgressiveMuteDuration(violationCount);
-
-  // Если 3+ варна - 24-часовой мут
-  if (violationCount >= 3) {
+  // Если достигли 3+ варн - 24-часовой мут
+  if (nextViolationCount >= 3) {
     muteMinutes = 24 * 60; // 24 часа
-    userViolationsList[userViolationsList.length - 1].severity = 'mute_24h';
+    newViolation.severity = 'auto_24h_mute'; // Отмечаем как 24-часовой
+    userViolations[userId] = userViolationsList;
     await db.set('userViolations', userViolations);
   }
+
 
   const muteMs = muteMinutes * 60000;
 
@@ -235,7 +239,7 @@ async function handleBadwordMute(message, foundBadwords, client) {
         { name: 'Найдено слов', value: `${foundBadwords.length} шт.`, inline: true },
         { name: 'Примеры', value: foundBadwords.slice(0, 5).join(', ') || 'N/A', inline: false },
         { name: 'Полный текст', value: message.content.length > 1000 ? message.content.substring(0, 1000) + '...' : message.content, inline: false },
-        { name: 'Наказание', value: `🔇 Мьют на ${badwordsList.muteTime} ${badwordsList.muteUnit === 'minute' ? 'минуту' : 'минут'}`, inline: false }
+        { name: 'Наказание', value: `🔇 Мьют на ${muteMinutes} минут (варна ${nextViolationCount}/3${nextViolationCount >= 3 ? ' — 24Ч!' : ''})`, inline: false }
       )
       .setTimestamp();
 
@@ -250,7 +254,7 @@ async function handleBadwordMute(message, foundBadwords, client) {
         .setDescription(`<@${message.author.id}> получил(а) роль Muted`) 
         .addFields(
           { name: 'Пользователь', value: `<@${message.author.id}> (${message.author.tag})`, inline: true },
-          { name: 'Длительность', value: `${badwordsList.muteTime} ${badwordsList.muteUnit}`, inline: true },
+          { name: 'Длительность', value: `${muteMinutes} минут (варна ${nextViolationCount}/3)`, inline: true },
           { name: 'Причина', value: `Использование запрещённой лексики: ${foundBadwords.slice(0,3).join(', ')}${foundBadwords.length>3?'...':''}`, inline: false },
           { name: 'Канал', value: `<#${message.channelId}>`, inline: true }
         )
@@ -275,7 +279,7 @@ async function handleBadwordMute(message, foundBadwords, client) {
       .setDescription(`Ваше сообщение было удалено за использование запрещённого контента`)
       .addFields(
         { name: 'Сервер', value: guild.name, inline: false },
-        { name: 'Наказание', value: `🔇 Мьют на ${badwordsList.muteTime} ${badwordsList.muteUnit === 'minute' ? 'минуту' : 'минут'}`, inline: false },
+        { name: 'Наказание', value: `🔇 Мьют на ${muteMinutes} минут (варна ${nextViolationCount}/3)`, inline: false },
         { name: 'Примечание', value: 'Попытки обхода фильтра также считаются нарушением', inline: false }
       )
       .setColor('#FF6B6B')

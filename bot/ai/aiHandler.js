@@ -48,18 +48,6 @@ async function handleAiButton(interaction) {
       // If already has an open branch
       const existing = all[userId];
       if (existing && existing.status === 'open') {
-          // Ensure thread visibility is restricted to owner + control role (best-effort)
-          if (existing.threadId) {
-            try {
-              const ch = await interaction.client.channels.fetch(existing.threadId).catch(() => null);
-              if (ch) {
-                try { await ch.members.add(interaction.user.id).catch(() => null); } catch (e) {}
-                try { await ch.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false }).catch(() => null); } catch (e) {}
-                try { await ch.permissionOverwrites.edit(CONTROL_ROLE_ID, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
-                try { await ch.permissionOverwrites.edit(interaction.user.id, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
-              }
-            } catch (e) {}
-          }
           await replySafe({ content: `У вас уже есть ветка: ${existing.chatId}`, ephemeral: true });
         return;
       }
@@ -98,29 +86,11 @@ async function handleAiButton(interaction) {
           try { await thread.members.add(interaction.user.id).catch(() => null); } catch (e) { /* ignore */ }
           all[userId].threadId = thread.id;
           all[userId].threadChannel = interaction.message.channel.id;
-          // Try to give the special role view/send permissions on the thread (best-effort)
+          // Restrict visibility: deny @everyone, allow only the creator user
           try {
             if (interaction.guild && typeof thread.permissionOverwrites === 'object') {
-              try { await thread.permissionOverwrites.edit(CONTROL_ROLE_ID, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
-            }
-          } catch (e) {}
-          // Also try to add all members with the control role to the thread members list
-          try {
-            if (interaction.guild) {
-              const role = interaction.guild.roles.cache.get(CONTROL_ROLE_ID);
-              if (role) {
-                const membersWithRole = interaction.guild.members.cache.filter(m => m.roles.cache.has(CONTROL_ROLE_ID));
-                // Restrict visibility: deny @everyone, allow creator and control role (best-effort)
-                try { await thread.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false }).catch(() => null); } catch (e) {}
-                try { await thread.permissionOverwrites.edit(CONTROL_ROLE_ID, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
-                try { await thread.permissionOverwrites.edit(interaction.user.id, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
-                // Add members with the control role into thread members (best-effort)
-                try {
-                  for (const m of membersWithRole.values()) {
-                    try { await thread.members.add(m.id).catch(() => null); } catch (e) {}
-                  }
-                } catch (e) {}
-              }
+              try { await thread.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false }).catch(() => null); } catch (e) {}
+              try { await thread.permissionOverwrites.edit(interaction.user.id, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
             }
           } catch (e) {}
           // Send a welcome message inside thread so it appears active and the user sees it
@@ -188,10 +158,9 @@ async function handleAiButton(interaction) {
           await replySafe({ content: 'Не удалось создать приватную ветку. У бота нет прав на создание приватных тредов в этом канале.', ephemeral: true });
           return;
         }
-        // persist and add members
+        // persist and add only the user
         all[userId] = { chatId, status: 'open', createdAt: new Date().toISOString(), threadId: thread.id, threadChannel: interaction.message.channel.id };
         try { await thread.members.add(interaction.user.id).catch(() => null); } catch (e) {}
-        try { const membersWithRole = interaction.guild.members.cache.filter(m => m.roles.cache.has(CONTROL_ROLE_ID)); for (const m of membersWithRole.values()) { try { await thread.members.add(m.id).catch(() => null); } catch (e) {} } } catch (e) {}
         try { await thread.send({ content: `Привет <@${interaction.user.id}>! Это новая приватная ветка ИИ.` }).catch(() => null); } catch (e) {}
         await db.set('aiChats', all);
         try { chatHistory.clearHistory(`${userId}:${chatId}`); } catch (e) {}

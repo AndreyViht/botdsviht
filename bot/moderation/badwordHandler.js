@@ -108,6 +108,15 @@ async function processBadwordQueue(client) {
 }
 
 /**
+ * Определяет время мута на основе количества нарушений
+ */
+function getProgressiveMuteDuration(violationCount) {
+  const durations = [1, 5, 15, 30, 60]; // минуты
+  // После 5 нарушений - 1 час максимум
+  return durations[Math.min(violationCount - 1, durations.length - 1)] || 60;
+}
+
+/**
  * Обработка одного нарушения мата
  */
 async function handleBadwordMute(message, foundBadwords, client) {
@@ -116,6 +125,39 @@ async function handleBadwordMute(message, foundBadwords, client) {
 
   const member = message.member;
   if (!member || !member.roles) return;
+
+  const userId = message.author.id;
+
+  // Получаем данные нарушений пользователя
+  const userViolations = db.get('userViolations') || {};
+  const userViolationsList = userViolations[userId] || [];
+  
+  // Добавляем новое нарушение
+  userViolationsList.push({
+    type: 'badword',
+    reason: foundBadwords.slice(0, 3).join(', '),
+    timestamp: new Date().toISOString(),
+    severity: 'warning'
+  });
+
+  await db.set('userViolations', userViolations);
+
+  // Подсчитываем активные варны (последние 30 дней)
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const activeViolations = userViolationsList.filter(v => new Date(v.timestamp).getTime() > thirtyDaysAgo);
+  const violationCount = activeViolations.length;
+
+  // Определяем время мута
+  let muteMinutes = getProgressiveMuteDuration(violationCount);
+
+  // Если 3+ варна - 24-часовой мут
+  if (violationCount >= 3) {
+    muteMinutes = 24 * 60; // 24 часа
+    userViolationsList[userViolationsList.length - 1].severity = 'mute_24h';
+    await db.set('userViolations', userViolations);
+  }
+
+  const muteMs = muteMinutes * 60000;
 
   // Получаем мьют роль
   let mutedRole = guild.roles.cache.get(MUTE_ROLE_ID) || guild.roles.cache.find(r => r.name.toLowerCase() === 'muted');
@@ -158,9 +200,6 @@ async function handleBadwordMute(message, foundBadwords, client) {
     // игнорируем ошибки получения каналов
   }
 
-  const unit = (badwordsList.muteUnit || 'minute');
-  const timeVal = Number(badwordsList.muteTime) || 1;
-  const muteMs = unit === 'minute' ? timeVal * 60000 : (unit === 'second' ? timeVal * 1000 : timeVal * 60000);
   let currentRoles = [];
 
   try {

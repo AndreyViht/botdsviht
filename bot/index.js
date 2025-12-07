@@ -156,6 +156,34 @@ client.on('interactionCreate', async (interaction) => {
         await db.set('tickets', tickets);
         await safeReply(interaction, { content: `Готово — закрыто обращений: ${closedCount}`, ephemeral: true });
       }
+      // Infopol buttons (очистка данных пользователя)
+      if (interaction.customId && interaction.customId.startsWith('infopol_clear_')) {
+        try {
+          const userId = interaction.customId.split('_')[2];
+          const config = require('./config');
+          const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+          const isAdmin = member && member.roles && config.adminRoles && config.adminRoles.some(rid => member.roles.cache.has(rid));
+          if (!isAdmin) return await safeReply(interaction, { content: 'У вас нет прав для этой операции.', ephemeral: true });
+
+          const userViolations = db.get('userViolations') || {};
+          const userMutes = db.get('userMutes') || {};
+          const userBans = db.get('userBans') || {};
+
+          delete userViolations[userId];
+          delete userMutes[userId];
+          delete userBans[userId];
+
+          await db.set('userViolations', userViolations);
+          await db.set('userMutes', userMutes);
+          await db.set('userBans', userBans);
+
+          await safeReply(interaction, { content: `✅ Данные пользователя <@${userId}> очищены.`, ephemeral: true });
+        } catch (err) {
+          console.error('Infopol clear button error', err);
+          await safeReply(interaction, { content: 'Ошибка при очистке данных.', ephemeral: true });
+        }
+        return;
+      }
       // Price menu buttons
       if (interaction.customId && interaction.customId.startsWith('price_')) {
         try { await handlePriceButton(interaction); } catch (err) { console.error('Price button error', err); await safeReply(interaction, { content: 'Ошибка при обработке прайса.', ephemeral: true }); }

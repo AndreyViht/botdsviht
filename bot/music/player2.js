@@ -8,6 +8,7 @@ const db = require('../libs/db');
 const { Readable, PassThrough } = require('stream');
 const musicLogger = require('./musicLogger');
 const musicEmbeds = require('../music-interface/musicEmbeds');
+const audioSourceDetector = require('./audioSourceDetector');
 
 // Allow overriding binaries
 
@@ -529,7 +530,27 @@ async function playNow(guild, voiceChannel, queryOrUrl, textChannel, userId, pla
     // allowed to proceed: cleanup previous procs/streams
     try { _killStateProcs(state); } catch (e) {}
 
-    const url = await findYouTubeUrl(queryOrUrl);
+    // Try new multi-source audio detector first
+    console.log('[playNow] Using new audio source detector for:', queryOrUrl.substring(0, 80));
+    const audioResult = await audioSourceDetector.getAudioStream(queryOrUrl);
+    
+    if (!audioResult.success) {
+      console.warn('[playNow] Audio source detector failed:', audioResult.error);
+      const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
+      const msgText = `❌ Не удалось найти трек по запросу: ${audioResult.error || 'неизвестная ошибка'}`;
+      let updated = false;
+      if (clientForPanel) updated = await updateControlMessageWithError(guild.id, clientForPanel, msgText).catch(() => false);
+      if (!updated && textChannel && textChannel.send) await textChannel.send(msgText);
+      return false;
+    }
+    
+    // Use the URL from audio detector as fallback to old findYouTubeUrl
+    // This maintains compatibility while adding new sources
+    let url = audioResult.url || (await findYouTubeUrl(queryOrUrl));
+    if (!url && audioResult.url) {
+      url = audioResult.url;
+    }
+    
     if (!url) {
       const clientForPanel = (state && state._client) ? state._client : (guild && guild.client ? guild.client : null);
       const msgText = '❌ Не удалось найти трек по запросу.';

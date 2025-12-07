@@ -128,37 +128,32 @@ async function handleBadwordMute(message, foundBadwords, client) {
 
   const userId = message.author.id;
 
-  // Получаем данные нарушений пользователя
-  const userViolations = db.get('userViolations') || {};
-  let userViolationsList = userViolations[userId] || [];
+  // Track badword-specific violations separately from manual warnings
+  // Используем отдельный ключ в БД: 'badwordViolations'
+  const badwordViolations = db.get('badwordViolations') || {};
+  let badwordList = badwordViolations[userId] || [];
 
-  // Подсчитываем активные варны ДО добавления нового (последние 30 дней)
+  // Подсчитываем активные автоматические нарушения ДО добавления нового (последние 30 дней)
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const activeViolations = userViolationsList.filter(v => new Date(v.timestamp).getTime() > thirtyDaysAgo);
-  const currentViolationCount = activeViolations.length; // Сколько уже есть
+  const activeBadwordViolations = badwordList.filter(v => new Date(v.timestamp).getTime() > thirtyDaysAgo);
+  const currentViolationCount = activeBadwordViolations.length; // Сколько уже есть автоматических нарушений
 
-  // Теперь добавляем НОВОЕ нарушение
+  // Добавляем НОВОЕ автоматическое нарушение (за мат)
   const newViolation = {
     type: 'badword',
     reason: foundBadwords.slice(0, 3).join(', '),
     timestamp: new Date().toISOString(),
-    severity: currentViolationCount + 1 // Номер этого нарушения: 1, 2, 3, 4...
+    severity: currentViolationCount + 1 // Номер этого автоматического нарушения
   };
-  userViolationsList.push(newViolation);
-  userViolations[userId] = userViolationsList;
-  await db.set('userViolations', userViolations);
+  badwordList.push(newViolation);
+  badwordViolations[userId] = badwordList;
+  await db.set('badwordViolations', badwordViolations);
 
-  // Определяем время мута на основе НОВОГО числа нарушений
+  // Определяем время мута на основе НОВОГО числа автоматических нарушений
   const nextViolationCount = currentViolationCount + 1; // После добавления нового
+  // Для автоматических матов применяем прогрессивную шкалу: 1,5,15,30,60 минут
   let muteMinutes = getProgressiveMuteDuration(nextViolationCount);
-
-  // Если достигли 3+ варн - 24-часовой мут
-  if (nextViolationCount >= 3) {
-    muteMinutes = 24 * 60; // 24 часа
-    newViolation.severity = 'auto_24h_mute'; // Отмечаем как 24-часовой
-    userViolations[userId] = userViolationsList;
-    await db.set('userViolations', userViolations);
-  }
+  // ВАЖНО: не переводим автоматические нарушения в 24-часовой мут — это поведение относится к ручным варнам
 
 
   const muteMs = muteMinutes * 60000;
@@ -239,7 +234,7 @@ async function handleBadwordMute(message, foundBadwords, client) {
         { name: 'Найдено слов', value: `${foundBadwords.length} шт.`, inline: true },
         { name: 'Примеры', value: foundBadwords.slice(0, 5).join(', ') || 'N/A', inline: false },
         { name: 'Полный текст', value: message.content.length > 1000 ? message.content.substring(0, 1000) + '...' : message.content, inline: false },
-        { name: 'Наказание', value: `🔇 Мьют на ${muteMinutes} минут (варна ${nextViolationCount}/3${nextViolationCount >= 3 ? ' — 24Ч!' : ''})`, inline: false }
+        { name: 'Наказание', value: `🔇 Авто-мьют на ${muteMinutes} минут (авто-нарушение ${nextViolationCount})`, inline: false }
       )
       .setTimestamp();
 
@@ -254,7 +249,7 @@ async function handleBadwordMute(message, foundBadwords, client) {
         .setDescription(`<@${message.author.id}> получил(а) роль Muted`) 
         .addFields(
           { name: 'Пользователь', value: `<@${message.author.id}> (${message.author.tag})`, inline: true },
-          { name: 'Длительность', value: `${muteMinutes} минут (варна ${nextViolationCount}/3)`, inline: true },
+          { name: 'Длительность', value: `${muteMinutes} минут (авто-нарушение ${nextViolationCount})`, inline: true },
           { name: 'Причина', value: `Использование запрещённой лексики: ${foundBadwords.slice(0,3).join(', ')}${foundBadwords.length>3?'...':''}`, inline: false },
           { name: 'Канал', value: `<#${message.channelId}>`, inline: true }
         )

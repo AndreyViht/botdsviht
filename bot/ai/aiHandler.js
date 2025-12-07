@@ -85,11 +85,16 @@ async function handleAiButton(interaction) {
           try { await thread.members.add(interaction.user.id).catch(() => null); } catch (e) { /* ignore */ }
           all[userId].threadId = thread.id;
           all[userId].threadChannel = interaction.message.channel.id;
-          // Restrict visibility: deny @everyone, allow only the creator user
+          // Restrict visibility: deny @everyone, allow only the creator user + guild owner + admins
           try {
             if (interaction.guild && typeof thread.permissionOverwrites === 'object') {
               try { await thread.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false }).catch(() => null); } catch (e) {}
+              // User who created the chat
               try { await thread.permissionOverwrites.edit(interaction.user.id, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
+              // Server owner gets automatic access
+              try { await thread.permissionOverwrites.edit(interaction.guild.ownerId, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
+              // Also add admins with CONTROL_ROLE_ID (view only, no send)
+              try { await thread.permissionOverwrites.edit(CONTROL_ROLE_ID, { ViewChannel: true, SendMessages: false }).catch(() => null); } catch (e) {}
             }
           } catch (e) {}
           // Send a welcome message inside thread so it appears active and the user sees it
@@ -170,6 +175,15 @@ async function handleAiButton(interaction) {
         // persist and add only the user
         all[userId] = { chatId, status: 'open', createdAt: new Date().toISOString(), threadId: thread.id, threadChannel: interaction.message.channel.id };
         try { await thread.members.add(interaction.user.id).catch(() => null); } catch (e) {}
+        // Set permissions: user + owner + admins can view
+        try {
+          if (interaction.guild && typeof thread.permissionOverwrites === 'object') {
+            try { await thread.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false }).catch(() => null); } catch (e) {}
+            try { await thread.permissionOverwrites.edit(interaction.user.id, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
+            try { await thread.permissionOverwrites.edit(interaction.guild.ownerId, { ViewChannel: true, SendMessages: true }).catch(() => null); } catch (e) {}
+            try { await thread.permissionOverwrites.edit(CONTROL_ROLE_ID, { ViewChannel: true, SendMessages: false }).catch(() => null); } catch (e) {}
+          }
+        } catch (e) {}
         try { await thread.send({ content: `Привет <@${interaction.user.id}>! Это новая приватная ветка ИИ.` }).catch(() => null); } catch (e) {}
         await db.set('aiChats', all);
         try { chatHistory.clearHistory(`${userId}:${chatId}`); } catch (e) {}

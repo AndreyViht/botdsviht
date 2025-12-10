@@ -292,41 +292,89 @@ async function findYouTubeUrl(query) {
   try {
     // Try direct search and collect candidates
     let r = await yts(searchQuery);
-    let vids = r && r.videos && r.videos.length ? r.videos.filter(v => !v.live && v.seconds > 0) : [];
-    // Prefer music-like videos: filter out very long videos and obvious non-music results
-    const blacklist = ['full album', 'full song', 'full mix', 'album', 'movie', 'episode', 'podcast', 'interview', 'documentary', 'soundtrack', 'live', 'mashup', 'mix', 'cover', 'karaoke'];
+    let vids = r && r.videos && r.videos.length ? r.videos.filter(v => !v.live && (v.seconds || 0) > 20) : [];
+
+    // Blacklist and game-related terms we definitely want to exclude
+    const blacklist = ['full album', 'full song', 'full mix', 'album', 'movie', 'episode', 'podcast', 'interview', 'documentary', 'soundtrack', 'mashup'];
+    const gamingBlacklist = ['gameplay', 'minecraft', "let's play", 'walkthrough', 'gameplay', 'скриншот', 'стрим', 'влог', 'геймплей'];
     const queryLower = (query || '').toLowerCase();
     const prefersLong = blacklist.some(w => queryLower.includes(w));
-    vids = vids.filter(v => {
-      try {
-        const t = (v.title || '').toLowerCase();
-        const seconds = v.seconds || 0;
-        // Exclude very long videos unless query explicitly asks for them
-        if (!prefersLong && seconds > 600) return false;
-        // Exclude titles containing blacklist terms unless query explicitly requests them
-        for (const b of blacklist) {
-          if (!prefersLong && t.includes(b)) return false;
-        }
-        return true;
-      } catch (e) { return false; }
-    });
-    // Sort by duration ascending to prefer typical song lengths
-    vids.sort((a, b) => (a.seconds || 0) - (b.seconds || 0));
-    
-    // Try adding 'audio' keyword if nothing found
-    if (!vids.length) {
-      r = await yts(`${searchQuery} audio`);
-      vids = r && r.videos && r.videos.length ? r.videos.filter(v => !v.live && v.seconds > 0) : [];
+
+    // Helper to compute a relevance score for each video
+    function scoreVideo(v) {
+      const title = (v.title || '').toLowerCase();
+      const author = ((v.author && v.author.name) || (v.owner && v.owner.name) || '').toLowerCase();
+      const seconds = v.seconds || 0;
+      let score = 0;
+
+      // Penalize obvious non-music/gaming videos
+      for (const g of gamingBlacklist) if (title.includes(g) || author.includes(g)) return -9999;
+
+      // Prefer official channels and Topic/VEVO/uploader cues
+      const officialIndicators = ['vevo', 'official', 'topic', 'audio', 'lyrics'];
+      for (const oi of officialIndicators) {
+        if (author.includes(oi) || title.includes(oi)) score += 30;
+      }
+
+      // Word match scoring - require tokens from query
+      const tokens = queryLower.split(/\s+/).filter(Boolean);
+      let matches = 0;
+      for (const t of tokens) {
+        if (t.length < 2) continue;
+        if (title.includes(t) || author.includes(t)) matches++;
+      }
+      score += matches * 20;
+
+      // Favor typical song durations (30s..10min) and penalize extremes
+      if (seconds >= 30 && seconds <= 600) score += 20;
+      if (seconds < 30) score -= 50;
+      if (seconds > 1200) score -= 40;
+
+      // Favor shorter (song-like) durations slightly
+      score -= Math.max(0, (seconds - 240) / 30);
+
+      return score;
     }
-    
-    // Try broader search if still empty
+
+    // Filter out blacklist terms and gameplay; then score and sort
+    vids = vids.filter(v => {
+      const t = (v.title || '').toLowerCase();
+      if (!prefersLong && (v.seconds || 0) > 1200) return false;
+      for (const b of blacklist) if (!prefersLong && t.includes(b)) return false;
+      return true;
+    });
+
+    // If too many, compute scores and sort by score desc then duration closeness
+    if (vids.length) {
+      const scored = vids.map(v => ({ v, score: scoreVideo(v) }));
+      scored.sort((a, b) => b.score - a.score || ((a.v.seconds || 0) - (b.v.seconds || 0)));
+      vids = scored.filter(s => s.score > -1000).map(s => s.v);
+    }
+
+    // If nothing good found, try targeted searches to prefer official audio/lyrics
+    if (!vids.length) {
+      const variants = [`${searchQuery} official audio`, `${searchQuery} official video`, `${searchQuery} lyrics`, `${searchQuery} audio`];
+      for (const vq of variants) {
+        try {
+          const rr = await yts(vq);
+          const found = rr && rr.videos ? rr.videos.filter(x => !x.live && (x.seconds || 0) > 20) : [];
+          if (found && found.length) {
+            // score found set and pick best
+            const scored = found.map(x => ({ v: x, score: scoreVideo(x) }));
+            scored.sort((a, b) => b.score - a.score || ((a.v.seconds || 0) - (b.v.seconds || 0)));
+            const chosen = scored.find(s => s.score > -1000);
+            if (chosen) { vids = [chosen.v]; break; }
+            vids = found;
+          }
+        } catch (e) { /* ignore */ }
+      }
+    }
+
+    // Try broader search fallback
     if (!vids.length) {
       r = await yts(query.split('?')[0].split('/').pop() || query);
-      vids = r && r.videos && r.videos.length ? r.videos.filter(v => !v.live && v.seconds > 0) : [];
+      vids = r && r.videos && r.videos.length ? r.videos.filter(v => !v.live && (v.seconds || 0) > 20) : [];
     }
-    
-    // Fallback to any video results if still empty
-    if (!vids.length && r && r.videos && r.videos.length) vids = r.videos;
 
     // If still nothing and play-dl is available, try play-dl search as a fallback
     if (!vids.length && playdl) {
@@ -337,7 +385,7 @@ async function findYouTubeUrl(query) {
         }
       } catch (e) { /* ignore */ }
     }
-    
+
     const candidates = vids.map(v => ({ url: v.url, title: v.title }));
     return candidates.length ? { candidates } : null;
   } catch (e) {

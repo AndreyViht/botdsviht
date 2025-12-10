@@ -289,11 +289,10 @@ async function handleMusicButton(interaction) {
         // Update public status message about owner
         try { await _updateStatusChannel(guild.id, client); } catch (e) {}
         // Show owner menu
-        // New single-panel owner controls: Find, VK Chart, Stop
+        // New single-panel owner controls: Find, Stop
         const embed = createMusicMenuEmbed();
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('music_find').setLabel('🔎 Найти музыку').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('music_vk_chart').setLabel('📈 Чарт VK').setStyle(ButtonStyle.Secondary),
           new ButtonBuilder().setCustomId('music_release').setLabel('⏹️ Остановить плеер').setStyle(ButtonStyle.Danger)
         );
         // Update main control message - try to update stored message
@@ -416,57 +415,7 @@ async function handleMusicButton(interaction) {
       return;
     }
 
-    // VK CHART: play configured VK chart stream (requires VK_CHART_URL in env/config)
-    if (customId === 'music_vk_chart') {
-      try {
-        let memberRef = member;
-        if ((!memberRef || !memberRef.voice || !memberRef.voice.channel) && guild) {
-          try { memberRef = await guild.members.fetch(user.id).catch(() => null); } catch (e) { memberRef = null; }
-        }
-        const voiceChannel = memberRef?.voice?.channel;
-        if (!voiceChannel) {
-          const embed = new EmbedBuilder().setTitle('❌ Не подключены к голосовому каналу').setColor(0xFF5252).setDescription('Подключитесь к голосовому каналу и попробуйте снова.');
-          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger));
-          await _updateMainControlMessage(guild.id, client, [embed], [row]);
-          try { await interaction.reply({ content: '❌ Вы не в голосовом канале.', ephemeral: true }); } catch (e) {}
-          return;
-        }
-
-        const cfg = require('../config');
-        if (!cfg.vkChartUrl) {
-          try { await interaction.reply({ content: '❌ Чарт VK не настроен. Установите переменную окружения `VK_CHART_URL` в конфиге.', ephemeral: true }); } catch (e) {}
-          return;
-        }
-
-        // Try to play as radio stream
-        try {
-          const radioStream = { url: cfg.vkChartUrl };
-          const ok = await musicPlayer.playRadio(guild, voiceChannel, radioStream, interaction.channel, user.id);
-          if (!ok) {
-            const embed = new EmbedBuilder().setTitle('❌ Не удалось подключиться к чарту VK').setColor(0xFF5252).setDescription('Попробуйте ещё раз');
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger));
-            await _updateMainControlMessage(guild.id, client, [embed], [row]);
-            try { await interaction.reply({ content: '❌ Ошибка подключения.', ephemeral: true }); } catch (e) {}
-            return;
-          }
-
-          activeRadios.set(guild.id, { radio: { label: 'VK Chart' }, userId: user.id });
-          const embed = createPlayerControlsEmbed('VK Chart');
-          const controlRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('music_release').setLabel('⏹️ Остановить плеер').setStyle(ButtonStyle.Danger)
-          );
-          await _updateMainControlMessage(guild.id, client, [embed], [controlRow]);
-          try { await interaction.reply({ content: `▶️ Включаю Чарт VK...`, ephemeral: true }); } catch (e) {}
-        } catch (err) {
-          console.error('Error playing VK chart:', err);
-          const embed = new EmbedBuilder().setTitle('❌ Ошибка при подключении').setColor(0xFF5252).setDescription(err && err.message ? String(err.message).slice(0, 200) : 'Ошибка');
-          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger));
-          await _updateMainControlMessage(guild.id, client, [embed], [row]);
-          try { await interaction.reply({ content: '❌ Ошибка.', ephemeral: true }); } catch (e) {}
-        }
-      } catch (e) { console.error('music_vk_chart handler error', e); try { await interaction.reply({ content: 'Ошибка при запуске чарта VK.', ephemeral: true }); } catch(ignore){} }
-      return;
-    }
+    // VK functionality removed: using YouTube-only search and playback
 
     // PAUSE / RESUME
     if (customId === 'music_pause') {
@@ -540,7 +489,6 @@ async function handleMusicButton(interaction) {
       const embed = createMusicMenuEmbed();
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('music_find').setLabel('🔎 Найти музыку').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('music_vk_chart').setLabel('📈 Чарт VK').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('music_release').setLabel('⏹️ Остановить плеер').setStyle(ButtonStyle.Danger)
       );
       await _updateMainControlMessage(guild.id, client, [embed], [row]);

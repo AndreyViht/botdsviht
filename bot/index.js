@@ -1081,11 +1081,16 @@ client.once('ready', async () => {
     const controlChannel = await client.channels.fetch(CONTROL_PANEL_CHANNEL_ID).catch(() => null);
     if (controlChannel && controlChannel.isTextBased && controlChannel.isTextBased()) {
       const startupEmbed = new EmbedBuilder()
-        .setTitle('🎵 Плеер в разработке')
-        .setColor(0xFFA500)
-        .setDescription('Музыкальный плеер находится в процессе разработки и доработки.\nОставайтесь в курсе!')
+        .setTitle('🎵 Viht player v.4214')
+        .setColor(0x2C3E50)
+        .setDescription('🎶 Добро пожаловать в музыкальный плеер!\n\n✨ Нажмите кнопку ниже, чтобы занять плеер и начать слушать музыку.')
+        .setThumbnail(client.user.displayAvatarURL({ size: 256 }))
+        .setFooter({ text: '🎵 Viht Audio System' })
         .setTimestamp();
-      await controlChannel.send({ embeds: [startupEmbed] }).catch(() => null);
+      const occupyRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary)
+      );
+      await controlChannel.send({ embeds: [startupEmbed], components: [occupyRow] }).catch(() => null);
       console.log('Control panel startup message posted to', CONTROL_PANEL_CHANNEL_ID);
     }
   } catch (e) {

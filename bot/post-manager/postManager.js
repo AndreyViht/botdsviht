@@ -126,6 +126,7 @@ async function handleChannelSelect(interaction) {
 
     const selectedChannelId = interaction.values[0];
     session.targetChannelId = selectedChannelId;
+    console.log('[POST_MANAGER] Selected channel:', selectedChannelId);
 
     // Show title input modal
     const modal = new ModalBuilder()
@@ -143,10 +144,19 @@ async function handleChannelSelect(interaction) {
         )
       );
 
-    await interaction.showModal(modal);
+    // For SelectMenuInteraction, we must use showModal without deferring
+    if (interaction.isStringSelectMenu() || interaction.isChannelSelectMenu()) {
+      await interaction.showModal(modal);
+    } else {
+      await interaction.reply({ content: '❌ Неподдерживаемый тип интеракции', ephemeral: true });
+    }
   } catch (e) {
-    console.error('[POST_MANAGER] handleChannelSelect error:', e.message);
-    await interaction.reply({ content: '❌ Ошибка: ' + e.message, ephemeral: true }).catch(() => null);
+    console.error('[POST_MANAGER] handleChannelSelect error:', e.message, e.stack);
+    try {
+      await interaction.reply({ content: '❌ Ошибка: ' + e.message, ephemeral: true });
+    } catch (replyErr) {
+      console.error('[POST_MANAGER] Failed to send error reply:', replyErr.message);
+    }
   }
 }
 

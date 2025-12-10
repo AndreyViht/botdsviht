@@ -17,6 +17,31 @@ const config = require('../config');
 const LOG_CHANNEL_ID = config.musicLogChannelId || '1445848232965181500';
 const ADMIN_ROLE_ID = (config.adminRoles && config.adminRoles.length > 0) ? config.adminRoles[0] : '1436485697392607303';
 
+// Channel where we must suppress ephemeral replies and only keep the single control message
+const CONTROL_PANEL_CHANNEL_ID = '1443194196172476636';
+
+// Safe reply helpers: suppress responses when interaction happens in CONTROL_PANEL_CHANNEL_ID
+async function maybeReply(interaction, options) {
+  try {
+    if (interaction.channel && interaction.channel.id === CONTROL_PANEL_CHANNEL_ID) return null;
+    if (interaction.replied || interaction.deferred) return await interaction.followUp(options).catch(() => null);
+    return await interaction.reply(options).catch(() => null);
+  } catch (e) { return null; }
+}
+
+async function maybeFollowUp(interaction, options) {
+  try {
+    if (interaction.channel && interaction.channel.id === CONTROL_PANEL_CHANNEL_ID) return null;
+    return await interaction.followUp(options).catch(() => null);
+  } catch (e) { return null; }
+}
+
+async function maybeEditReply(interaction, options) {
+  try {
+    if (interaction.channel && interaction.channel.id === CONTROL_PANEL_CHANNEL_ID) return null;
+    return await interaction.editReply(options).catch(() => null);
+  } catch (e) { return null; }
+}
 // ===== HELPERS =====
 async function _getControlRecForGuild(guildId) {
   try {
@@ -190,20 +215,20 @@ async function handleMusicButton(interaction) {
       const guildId = parts[3];
       const ownerId = parts[4];
       const requesterId = parts[5];
-      if (!guildId || !ownerId || !requesterId) return await interaction.reply({ content: 'Неверный запрос.', ephemeral: true });
-      if (String(user.id) !== String(requesterId)) return await interaction.reply({ content: 'Этот запрос может отправить только инициатор.', ephemeral: true });
+      if (!guildId || !ownerId || !requesterId) return await maybeReply(interaction, { content: 'Неверный запрос.', ephemeral: true });
+      if (String(user.id) !== String(requesterId)) return await maybeReply(interaction, { content: 'Этот запрос может отправить только инициатор.', ephemeral: true });
       const ownerUser = await client.users.fetch(ownerId).catch(() => null);
-      if (!ownerUser) return await interaction.reply({ content: 'Не удалось найти владельца для отправки запроса.', ephemeral: true });
+      if (!ownerUser) return await maybeReply(interaction, { content: 'Не удалось найти владельца для отправки запроса.', ephemeral: true });
       const dmRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`music_owner_release_now_${guildId}_${requesterId}`).setLabel('Освободить сейчас').setStyle(ButtonStyle.Danger),
         new ButtonBuilder().setCustomId(`music_owner_release_after_${guildId}_${requesterId}`).setLabel('Освободить после трека').setStyle(ButtonStyle.Primary)
       );
       try {
         await ownerUser.send({ content: `Пользователь <@${requesterId}> просит освободить плеер на сервере **${(interaction.guild && interaction.guild.name) ? interaction.guild.name : guildId}**.`, components: [dmRow] });
-        try { await interaction.reply({ content: '✅ Запрос отправлен владельцу.', ephemeral: true }); } catch (e) { try { await interaction.followUp({ content: '✅ Запрос отправлен владельцу.', ephemeral: true }); } catch(ignore){} }
+        await maybeReply(interaction, { content: '✅ Запрос отправлен владельцу.', ephemeral: true });
         try { const logCh = await client.channels.fetch(LOG_CHANNEL_ID).catch(()=>null); if (logCh) await logCh.send(`📨 <@${requesterId}> отправил запрос владельцу <@${ownerId}> освободить плеер на сервере **${(interaction.guild && interaction.guild.name)?interaction.guild.name:guildId}**`); } catch(e){}
       } catch (e) {
-        try { await interaction.reply({ content: '❌ Не удалось отправить личное сообщение владельцу.', ephemeral: true }); } catch (e2) {}
+        await maybeReply(interaction, { content: '❌ Не удалось отправить личное сообщение владельцу.', ephemeral: true });
       }
       return;
     }
@@ -212,11 +237,11 @@ async function handleMusicButton(interaction) {
       const parts = customId.split('_');
       const guildId = parts[3];
       const requesterId = parts[4];
-      if (!guildId || !requesterId) return await interaction.reply({ content: 'Неверный запрос.', ephemeral: true });
+      if (!guildId || !requesterId) return await maybeReply(interaction, { content: 'Неверный запрос.', ephemeral: true });
       // verify current owner in DB
       const panelRec = db.get(`musicControl_${guildId}`) || {};
       if (!panelRec || String(panelRec.owner) !== String(user.id)) {
-        try { await interaction.reply({ content: 'Вы не являетесь текущим владельцем плеера.', ephemeral: true }); } catch (e) {}
+        await maybeReply(interaction, { content: 'Вы не являетесь текущим владельцем плеера.', ephemeral: true });
         return;
       }
       // fetch guild object
@@ -230,7 +255,7 @@ async function handleMusicButton(interaction) {
       try { await _updateStatusChannel(guildId, client); } catch (e) {}
       try { await _updateMainControlMessage(guildId, client, [new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы занять плеер (первый нажимает — становится владельцем плеера).')], [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary))]); } catch(e){}
       try { const requester = await client.users.fetch(requesterId).catch(()=>null); if (requester) await requester.send(`Владелец плеера освободил плеер на сервере. Вы можете теперь воспользоваться им.`); } catch (e) {}
-      try { await interaction.reply({ content: '✅ Вы освободили плеер. Запрос выполнен.', ephemeral: true }); } catch (e) { try { await interaction.followUp({ content: '✅ Вы освободили плеер. Запрос выполнен.', ephemeral: true }); } catch(ignore){} }
+      await maybeReply(interaction, { content: '✅ Вы освободили плеер. Запрос выполнен.', ephemeral: true });
       try { const logCh = await client.channels.fetch(LOG_CHANNEL_ID).catch(()=>null); if (logCh) await logCh.send(`✅ Владелец <@${user.id}> освободил плеер по запросу <@${requesterId}> (сервер: ${guildId})`); } catch(e){}
       return;
     }
@@ -239,14 +264,14 @@ async function handleMusicButton(interaction) {
       const parts = customId.split('_');
       const guildId = parts[3];
       const requesterId = parts[4];
-      if (!guildId || !requesterId) return await interaction.reply({ content: 'Неверный запрос.', ephemeral: true });
+      if (!guildId || !requesterId) return await maybeReply(interaction, { content: 'Неверный запрос.', ephemeral: true });
       const panelRec = db.get(`musicControl_${guildId}`) || {};
       if (!panelRec || String(panelRec.owner) !== String(user.id)) {
-        try { await interaction.reply({ content: 'Вы не являетесь текущим владельцем плеера.', ephemeral: true }); } catch (e) {}
+        await maybeReply(interaction, { content: 'Вы не являетесь текущим владельцем плеера.', ephemeral: true });
         return;
       }
       await db.set(`musicReleaseAfter_${guildId}`, String(requesterId)).catch(()=>{});
-      try { await interaction.reply({ content: '✅ Я освобожу плеер после завершения текущего трека.', ephemeral: true }); } catch (e) { try { await interaction.followUp({ content: '✅ Я освобожу плеер после завершения текущего трека.', ephemeral: true }); } catch(ignore){} }
+      await maybeReply(interaction, { content: '✅ Я освобожу плеер после завершения текущего трека.', ephemeral: true });
       try { const requester = await client.users.fetch(requesterId).catch(()=>null); if (requester) await requester.send(`Владелец плеера согласился освободить плеер после текущего трека.`); } catch(e){}
       try { const logCh = await client.channels.fetch(LOG_CHANNEL_ID).catch(()=>null); if (logCh) await logCh.send(`⏳ Владелец <@${user.id}> поставил освобождение после трека по запросу <@${requesterId}> (сервер: ${guildId})`); } catch(e){}
       return;
@@ -325,7 +350,7 @@ async function handleMusicButton(interaction) {
         // Only allow admins
         const memberObj = member || (guild ? await guild.members.fetch(user.id).catch(() => null) : null);
         const isAdmin = memberObj && memberObj.roles && memberObj.roles.cache && config.adminRoles && config.adminRoles.some(rid => memberObj.roles.cache.has(rid));
-        if (!isAdmin) return await interaction.reply({ content: 'У вас нет прав для этой операции.', ephemeral: true });
+        if (!isAdmin) return await maybeReply(interaction, { content: 'У вас нет прав для этой операции.', ephemeral: true });
 
         // Stop music and clear owner
         try { await musicPlayer.stop(guild); } catch (e) { console.warn('admin_release: stop failed', e); }
@@ -340,15 +365,15 @@ async function handleMusicButton(interaction) {
         const registerEmbed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы занять плеер (первый нажимает — становится владельцем плеера).');
         const registerRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary));
         await _updateMainControlMessage(guild.id, client, [registerEmbed], [registerRow]);
-        try { await interaction.reply({ embeds: [embed] }); } catch (e) {}
-      } catch (e) { console.error('music_admin_release handler error', e); try { await interaction.reply({ content: 'Ошибка при выполнении админ‑отключения.', ephemeral: true }); } catch(ignore){} }
+        await maybeReply(interaction, { embeds: [embed] });
+      } catch (e) { console.error('music_admin_release handler error', e); await maybeReply(interaction, { content: 'Ошибка при выполнении админ‑отключения.', ephemeral: true }); }
       return;
     }
 
     // ===== CHECK OWNER FOR ALL OTHER ACTIONS =====
     // If no owner, user must register first
     if (!ownerId) {
-      try { await interaction.reply({ content: '🔒 Плеер свободен. Нажмите «Занять плеер», чтобы получить доступ.', ephemeral: true }); } catch (e) {}
+      await maybeReply(interaction, { content: '🔒 Плеер свободен. Нажмите «Занять плеер», чтобы получить доступ.', ephemeral: true });
       return;
     }
 
@@ -357,7 +382,7 @@ async function handleMusicButton(interaction) {
       const requestRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`music_request_free_${guild.id}_${ownerId}_${user.id}`).setLabel('Попросить освободить').setStyle(ButtonStyle.Primary)
       );
-      try { await interaction.reply({ content: '❌ Плеер занят другим пользователем. Дождитесь освобождения.', ephemeral: true, components: [requestRow] }); } catch (e) { try { await interaction.followUp({ content: '❌ Плеер занят другим пользователем. Дождитесь освобождения.', ephemeral: true, components: [requestRow] }); } catch(ignore){} }
+      await maybeReply(interaction, { content: '❌ Плеер занят другим пользователем. Дождитесь освобождения.', ephemeral: true, components: [requestRow] });
       return;
     }
 
@@ -379,10 +404,10 @@ async function handleMusicButton(interaction) {
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary));
         await _updateMainControlMessage(guild.id, client, [embed], [row]);
         
-        return await interaction.reply({ content: '⏹️ Вы остановили бота и освободили доступ.', ephemeral: true });
+        return await maybeReply(interaction, { content: '⏹️ Вы остановили бота и освободили доступ.', ephemeral: true });
       } catch (e) {
         console.error('music_release error', e);
-        try { await interaction.reply({ content: '❌ Ошибка при остановке.', ephemeral: true }); } catch (e2) {}
+        await maybeReply(interaction, { content: '❌ Ошибка при остановке.', ephemeral: true });
       }
       return;
     }
@@ -410,8 +435,8 @@ async function handleMusicButton(interaction) {
         );
 
         await _updateMainControlMessage(guild.id, client, [embed], [row1, row2, row3]);
-        try { await interaction.reply({ content: '✅ Меню поиска отображено.', ephemeral: true }); } catch (e) {}
-      } catch (e) { console.error('music_find handler error', e); try { await interaction.reply({ content: 'Ошибка при открытии меню поиска.', ephemeral: true }); } catch(ignore){} }
+        await maybeReply(interaction, { content: '✅ Меню поиска отображено.', ephemeral: true });
+      } catch (e) { console.error('music_find handler error', e); await maybeReply(interaction, { content: 'Ошибка при открытии меню поиска.', ephemeral: true }); }
       return;
     }
 
@@ -435,7 +460,7 @@ async function handleMusicButton(interaction) {
             }
           }
         } catch (e) {}
-        try { await interaction.reply({ content: ok ? '⏸ Пауза' : '⏯️ Состояние обновлено', ephemeral: true }); } catch (e) {}
+        await maybeReply(interaction, { content: ok ? '⏸ Пауза' : '⏯️ Состояние обновлено', ephemeral: true });
       } catch (e) { console.error('music_pause handler error', e); try { await interaction.reply({ content: 'Ошибка при паузе.', ephemeral: true }); } catch(ignore){} }
       return;
     }
@@ -492,7 +517,7 @@ async function handleMusicButton(interaction) {
         new ButtonBuilder().setCustomId('music_release').setLabel('⏹️ Остановить плеер').setStyle(ButtonStyle.Danger)
       );
       await _updateMainControlMessage(guild.id, client, [embed], [row]);
-      try { await interaction.reply({ content: '✅ Меню обновлено.', ephemeral: true }); } catch (e) {}
+      await maybeReply(interaction, { content: '✅ Меню обновлено.', ephemeral: true });
       return;
     }
 

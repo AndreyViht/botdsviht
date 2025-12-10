@@ -124,8 +124,8 @@ async function handleChannelSelect(interaction) {
       return await interaction.reply({ content: '❌ Сессия не найдена. Нажми "Новый пост"', ephemeral: true }).catch(() => null);
     }
 
-    const selectedChannel = interaction.channels.first();
-    session.targetChannelId = selectedChannel.id;
+    const selectedChannelId = interaction.values[0];
+    session.targetChannelId = selectedChannelId;
 
     // Show title input modal
     const modal = new ModalBuilder()

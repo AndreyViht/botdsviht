@@ -74,14 +74,63 @@ function buildControlRow(isPlaying = false) {
 // Post initial player message to control panel channel
 async function postPlayerMessage(client) {
   try {
-    const controlChannel = await client.channels.fetch(CONTROL_PANEL_CHANNEL_ID).catch(() => null);
-    if (!controlChannel || !controlChannel.isTextBased()) return null;
+    if (!client || !client.channels) {
+      console.warn('postPlayerMessage: client or client.channels not available');
+      return null;
+    }
+    
+    const controlChannel = await client.channels.fetch(CONTROL_PANEL_CHANNEL_ID).catch((err) => {
+      console.warn(`Failed to fetch control channel ${CONTROL_PANEL_CHANNEL_ID}:`, err.message);
+      return null;
+    });
+    
+    if (!controlChannel) {
+      console.warn('Control channel not found:', CONTROL_PANEL_CHANNEL_ID);
+      return null;
+    }
+    
+    if (!controlChannel.isTextBased || !controlChannel.isTextBased()) {
+      console.warn('Control channel is not text-based');
+      return null;
+    }
     
     const embed = buildOccupyEmbed();
     const row = buildOccupyRow();
     
-    const msg = await controlChannel.send({ embeds: [embed], components: [row] }).catch(() => null);
-    return msg;
+    // Check if message already exists in DB
+    const existingRecord = db.get('playerPanelMessage');
+    if (existingRecord && existingRecord.messageId) {
+      try {
+        const existingMsg = await controlChannel.messages.fetch(existingRecord.messageId).catch(() => null);
+        if (existingMsg) {
+          // Message exists, just update it
+          await existingMsg.edit({ embeds: [embed], components: [row] }).catch(() => null);
+          console.log('Updated existing player panel message:', existingRecord.messageId);
+          return existingMsg;
+        }
+      } catch (e) {
+        console.warn('Error fetching existing message:', e.message);
+      }
+    }
+    
+    // Post new message
+    const msg = await controlChannel.send({ embeds: [embed], components: [row] }).catch((err) => {
+      console.warn('Failed to send player panel message:', err.message);
+      return null;
+    });
+    
+    if (msg) {
+      // Save message ID to DB
+      try {
+        db.set('playerPanelMessage', { messageId: msg.id, channelId: CONTROL_PANEL_CHANNEL_ID, postedAt: Date.now() });
+        console.log('Posted new player panel message:', msg.id);
+      } catch (e) {
+        console.warn('Failed to save message ID to DB:', e.message);
+      }
+      return msg;
+    }
+    
+    return null;
   } catch (e) {
     console.error('postPlayerMessage error:', e.message);
     return null;

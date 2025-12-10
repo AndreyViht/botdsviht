@@ -62,6 +62,7 @@ const { handlePriceButton } = require('./price/priceHandler');
 const { handleAiButton, createAiPanelEmbed, makeButtons: makeAiButtons } = require('./ai/aiHandler');
 const { ensureMenuPanel, handleMenuButton } = require('./menus/menuHandler');
 const { postPlayerMessage, handlePlayerPanelButton, handlePlayerPanelModal } = require('./music-interface/playerPanel');
+const { postPostManagerPanel, handlePostManagerButton, handlePostManagerSelect, handlePostManagerModal } = require('./post-manager/postManager');
 // optional helpers
 let handleReactionAdd = null;
 let handleReactionRemove = null;
@@ -239,6 +240,11 @@ client.on('interactionCreate', async (interaction) => {
       // Menu buttons
       if (interaction.customId && interaction.customId.startsWith('menu_')) {
         try { await handleMenuButton(interaction); } catch (err) { console.error('Menu button error', err); await safeReply(interaction, { content: 'Ошибка при обработке меню.', ephemeral: true }); }
+        return;
+      }
+      // Post Manager buttons
+      if (interaction.customId && interaction.customId.startsWith('post_')) {
+        try { await handlePostManagerButton(interaction); } catch (err) { console.error('Post manager button error', err); await safeReply(interaction, { content: 'Ошибка при управлении постом.', ephemeral: true }); }
         return;
       }
       // Player panel buttons (Viht player v.4214)
@@ -751,6 +757,25 @@ client.on('interactionCreate', async (interaction) => {
       // Player panel modals (search and queue)
       if (interaction.customId && (interaction.customId.startsWith('player_search_modal_') || interaction.customId.startsWith('player_queue_modal_'))) {
         try { await handlePlayerPanelModal(interaction, client); } catch (err) { console.error('Player panel modal error', err); await safeReply(interaction, { content: 'Ошибка при обработке формы.', ephemeral: true }); }
+        return;
+      }
+      // Post Manager modals
+      if (interaction.customId && (interaction.customId.startsWith('post_') && (interaction.customId.includes('modal') || interaction.customId.includes('select')))) {
+        try { 
+          if (interaction.customId.includes('select')) {
+            await handlePostManagerSelect(interaction);
+          } else {
+            await handlePostManagerModal(interaction);
+          }
+        } catch (err) { console.error('Post manager modal/select error', err); await safeReply(interaction, { content: 'Ошибка при обработке формы.', ephemeral: true }); }
+        return;
+      }
+    }
+    // Handle all select menus (including channel, string select, etc)
+    if (interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu() || interaction.isUserSelectMenu()) {
+      // Post Manager channel/color select
+      if (interaction.customId && interaction.customId.startsWith('post_')) {
+        try { await handlePostManagerSelect(interaction); } catch (err) { console.error('Post manager select error', err); await safeReply(interaction, { content: 'Ошибка при выборе.', ephemeral: true }); }
         return;
       }
     }
@@ -1392,6 +1417,11 @@ client.once('ready', async () => {
       }
     }
   } catch (e) { console.warn('Failed to post price panel on ready:', e && e.message ? e.message : e); }
+  // Post Post Manager panel
+  try {
+    await postPostManagerPanel(client);
+    setInterval(async () => { try { await postPostManagerPanel(client); } catch (e) { /* ignore */ } }, 5 * 60 * 1000);
+  } catch (e) { console.warn('Failed to post manager panel on ready:', e && e.message ? e.message : e); }
 });
 // Global safety handlers to avoid process crash on uncaught errors
 process.on('unhandledRejection', (reason, p) => {

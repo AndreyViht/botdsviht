@@ -638,15 +638,31 @@ client.on('interactionCreate', async (interaction) => {
           
           // Search for candidates
           if (isVK) {
-            // VK search
+            // VK search with fallback to YouTube
             try {
               const vkHandler = require('./vk/vkHandler');
               const vkResults = await vkHandler.searchAudio(songName);
               if (vkResults && vkResults.length > 0) {
                 searchResults = { candidates: vkResults, source: 'vk' };
+              } else {
+                console.warn('[Music Search] VK returned no results, falling back to YouTube');
               }
             } catch (vkErr) {
-              console.warn('VK search failed:', vkErr.message);
+              console.warn('[Music Search] VK search failed:', vkErr.message, '- falling back to YouTube');
+              // Fall back to YouTube
+            }
+            
+            // If VK search failed or returned no results, try YouTube
+            if (!searchResults) {
+              try {
+                searchResults = await musicPlayer.findYouTubeUrl(songName).catch(() => null);
+                if (searchResults) {
+                  searchResults.source = 'youtube';
+                  console.log('[Music Search] Using YouTube results as fallback for VK search');
+                }
+              } catch (e) {
+                console.error('[Music Search] YouTube fallback failed:', e.message);
+              }
             }
           } else {
             // YouTube search

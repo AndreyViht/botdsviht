@@ -76,18 +76,19 @@ const vkHandler = {
   /**
    * Search for audio in VK
    * @param {string} query - Song title or artist name
-   * @param {string} userToken - User's access token (optional, for private audios)
+   * @param {string} userToken - User's access token (optional, overrides config)
    * @returns {Promise<Array>} - Array of track objects with {id, owner_id, title, artist, duration, url}
    */
   async searchAudio(query, userToken = null) {
     try {
-      const token = userToken || config.vkServiceToken;
+      // Try user token first (has full permissions), fallback to service token
+      const token = userToken || config.vkUserToken || config.vkServiceToken;
       if (!token) {
-        console.error('searchAudio: No VK token provided');
-        throw new Error('No VK token provided. Set VK_SERVICE_TOKEN or use user OAuth token.');
+        console.error('searchAudio: No VK token configured');
+        throw new Error('No VK token configured. Set VK_USER_TOKEN or VK_SERVICE_TOKEN environment variable.');
       }
 
-      console.log(`[VK Search] Query: "${query}", Token: ${token.substring(0, 10)}...`);
+      console.log(`[VK Search] Query: "${query}", Using token: ${token.substring(0, 10)}...`);
 
       const response = await axios.get(`${VK_API_BASE}/audio.search`, {
         params: {
@@ -99,15 +100,15 @@ const vkHandler = {
         timeout: 10000
       });
 
-      console.log(`[VK Search Response]`, response.data);
-
       if (response.data.error) {
-        console.error('VK search error:', response.data.error.error_msg || JSON.stringify(response.data.error));
-        throw new Error(`VK API error: ${response.data.error.error_msg || 'Unknown error'}`);
+        const errorMsg = response.data.error.error_msg || JSON.stringify(response.data.error);
+        console.error('[VK Search] API error:', errorMsg);
+        console.error('[VK Search] Error code:', response.data.error.error_code);
+        throw new Error(`VK API error (${response.data.error.error_code}): ${errorMsg}`);
       }
 
       const items = response.data.response?.items || [];
-      console.log(`[VK Search] Found ${items.length} results`);
+      console.log(`[VK Search] Found ${items.length} results for "${query}"`);
       
       return items.map(audio => ({
         id: audio.id,

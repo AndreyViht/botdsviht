@@ -13,6 +13,7 @@ const config = {
   vkAppId: process.env.VK_APP_ID || null,
   vkAppSecret: process.env.VK_APP_SECRET || null,
   vkServiceToken: process.env.VK_SERVICE_TOKEN || null,
+  vkUserToken: process.env.VK_USER_TOKEN || null,
   vkOAuthRedirectUri: process.env.VK_OAUTH_REDIRECT_URI || 'http://localhost:3000/auth/vk/callback',
   useMockAi: process.env.USE_MOCK_AI === 'true',
   guildMembersIntent: process.env.GUILD_MEMBERS_INTENT === 'true',

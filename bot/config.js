@@ -9,6 +9,11 @@ const config = {
   aiChatChannelId: process.env.AI_CHAT_CHANNEL_ID || '1437189999882801173',
   announceChannelId: process.env.ANNOUNCE_CHANNEL_ID || '1436487981723680930',
   musicLogChannelId: process.env.MUSIC_LOG_CHANNEL_ID || process.env.ANNOUNCE_CHANNEL_ID || '1436487981723680930',
+  vkChartUrl: process.env.VK_CHART_URL || null,
+  vkAppId: process.env.VK_APP_ID || null,
+  vkAppSecret: process.env.VK_APP_SECRET || null,
+  vkServiceToken: process.env.VK_SERVICE_TOKEN || null,
+  vkOAuthRedirectUri: process.env.VK_OAUTH_REDIRECT_URI || 'http://localhost:3000/auth/vk/callback',
   useMockAi: process.env.USE_MOCK_AI === 'true',
   guildMembersIntent: process.env.GUILD_MEMBERS_INTENT === 'true',
   messageContentIntent: process.env.MESSAGE_CONTENT_INTENT === 'true'

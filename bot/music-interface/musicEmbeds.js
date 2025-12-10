@@ -4,7 +4,7 @@ function createMusicMenuEmbed() {
   const embed = new EmbedBuilder()
     .setTitle('🎵 Музыка')
     .setColor(0x9C27B0)
-    .setDescription('Выберите источник музыки:')
+    .setDescription('Панель плеера — нажмите "Занять плеер", чтобы начать.')
     .setThumbnail('https://cdn-icons-png.flaticon.com/512/3899/3899618.png');
   return embed;
 }

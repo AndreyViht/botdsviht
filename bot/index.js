@@ -617,11 +617,12 @@ client.on('interactionCreate', async (interaction) => {
         } catch (e) { console.error('music_modal_queue submit error', e); return await safeReply(interaction, { content: 'Ошибка при обработке формы музыки.', ephemeral: true }); }
       }
       // Custom music search modal: find and play
-      if (interaction.customId === 'music_search_modal') {
+      if (interaction.customId === 'music_search_modal' || interaction.customId === 'music_search_vk_modal') {
         try {
           // Defer immediately to avoid timeout
           await interaction.deferReply({ ephemeral: true });
           
+          const isVK = interaction.customId === 'music_search_vk_modal';
           const songName = interaction.fields.getTextInputValue('song_name').slice(0, 200);
           const guild = interaction.guild;
           const member = interaction.member || (guild ? await guild.members.fetch(interaction.user.id).catch(() => null) : null);
@@ -631,10 +632,28 @@ client.on('interactionCreate', async (interaction) => {
             return;
           }
           // Show searching message
-          await interaction.editReply({ content: `🔎 Ищу варианты для "${songName}"...`, ephemeral: true });
+          await interaction.editReply({ content: `🔎 Ищу варианты для "${songName}" ${isVK ? 'в VK' : 'на YouTube'}...`, ephemeral: true });
+          
+          let searchResults = null;
           
           // Search for candidates
-          const searchResults = await musicPlayer.findYouTubeUrl(songName).catch(() => null);
+          if (isVK) {
+            // VK search
+            try {
+              const vkHandler = require('./vk/vkHandler');
+              const vkResults = await vkHandler.searchAudio(songName);
+              if (vkResults && vkResults.length > 0) {
+                searchResults = { candidates: vkResults, source: 'vk' };
+              }
+            } catch (vkErr) {
+              console.warn('VK search failed:', vkErr.message);
+            }
+          } else {
+            // YouTube search
+            searchResults = await musicPlayer.findYouTubeUrl(songName).catch(() => null);
+            if (searchResults) searchResults.source = 'youtube';
+          }
+          
           if (!searchResults || !searchResults.candidates || searchResults.candidates.length === 0) {
             try { await interaction.followUp({ content: `❌ Не найдено вариантов для "${songName}". Попробуйте другой поиск.`, ephemeral: true }); } catch (e) {}
             return;
@@ -643,7 +662,6 @@ client.on('interactionCreate', async (interaction) => {
           const candidates = searchResults.candidates.slice(0, 10); // limit to 10 options
           const searchId = `search_${Date.now()}_${interaction.user.id}`;
           
-          // Store search results temporarily in interaction user's data (we'll reference by customId)
           // Create select menu or buttons for choosing
           let components = [];
           
@@ -685,17 +703,17 @@ client.on('interactionCreate', async (interaction) => {
           
           // Store candidates temporarily (in memory, with timeout cleanup)
           if (!global._musicSearchCache) global._musicSearchCache = {};
-          global._musicSearchCache[searchId] = { candidates, guildId: guild.id, voiceChannelId: voiceChannel.id, userId: interaction.user.id, timestamp: Date.now() };
+          global._musicSearchCache[searchId] = { candidates, guildId: guild.id, voiceChannelId: voiceChannel.id, userId: interaction.user.id, timestamp: Date.now(), source: searchResults.source };
           setTimeout(() => { delete global._musicSearchCache[searchId]; }, 60000); // Clear after 60s
           
           // Show results
           const resultEmbed = new EmbedBuilder()
-            .setTitle('🎵 Результаты поиска')
+            .setTitle(`🎵 Результаты поиска ${searchResults.source === 'vk' ? '(VK)' : '(YouTube)'}`)
             .setColor(0x7289DA)
             .setDescription(`По запросу "${songName}" найдено ${candidates.length} результатов. Выберите трек(и):`)
             .addFields(candidates.slice(0, 5).map((c, i) => ({
               name: `${i+1}. ${(c.title || c.url).slice(0,50)}`,
-              value: '—',
+              value: c.artist ? `${c.artist}` : '—',
               inline: false
             })));
           
@@ -707,7 +725,7 @@ client.on('interactionCreate', async (interaction) => {
           }
           return;
         } catch (e) { 
-          console.error('music_search_modal submit error', e); 
+          console.error('music_search modal submit error', e); 
           try { await interaction.editReply({ content: 'Ошибка при поиске песни.', ephemeral: true }); } catch (e2) { console.warn('editReply failed', e2); }
         }
       }

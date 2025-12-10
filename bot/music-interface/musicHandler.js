@@ -80,9 +80,9 @@ async function _updateStatusChannel(guildId, client) {
       components = [row];
     } else {
       embed = new EmbedBuilder().setTitle('🎛️ Статус: Плеер свободен').setColor(0x2ECC71)
-        .setDescription('Плеер свободен — нажмите «Начать пользоваться» в панели управления, чтобы занять его.');
+        .setDescription('Плеер свободен — нажмите «Занять плеер» в панели управления, чтобы занять его.');
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary)
       );
       components = [row];
     }
@@ -130,8 +130,8 @@ async function ensureMusicControlPanel(channel, ownerId = null) {
     const guildId = channel.guild.id;
     const key = `musicControl_${guildId}`;
     const rec = db.get(key);
-    const embed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы начать пользоваться ботом (первый нажимает — становится владельцем плеера).');
-    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary));
+    const embed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы занять плеер (первый нажимает — становится владельцем плеера).');
+    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary));
     if (!rec || !rec.channelId || !rec.messageId) {
       const posted = await channel.send({ embeds: [embed], components: [row] }).catch(() => null);
       if (posted) {
@@ -166,7 +166,7 @@ async function updateControlMessageWithError(guildId, client, content) {
     const rec = db.get(key) || {};
     const embed = new EmbedBuilder().setTitle(content).setColor(0xFF5252);
     // Build fallback components
-    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary));
+    const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary));
     // If there's an owner, show owner quick controls instead
     if (rec && rec.owner) {
       const ownerRow = new ActionRowBuilder().addComponents(
@@ -228,7 +228,7 @@ async function handleMusicButton(interaction) {
       delete rec.owner;
       await db.set(panelKey, rec).catch(()=>{});
       try { await _updateStatusChannel(guildId, client); } catch (e) {}
-      try { await _updateMainControlMessage(guildId, client, [new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы начать пользоваться ботом (первый нажимает — становится владельцем плеера).')], [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary))]); } catch(e){}
+      try { await _updateMainControlMessage(guildId, client, [new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы занять плеер (первый нажимает — становится владельцем плеера).')], [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary))]); } catch(e){}
       try { const requester = await client.users.fetch(requesterId).catch(()=>null); if (requester) await requester.send(`Владелец плеера освободил плеер на сервере. Вы можете теперь воспользоваться им.`); } catch (e) {}
       try { await interaction.reply({ content: '✅ Вы освободили плеер. Запрос выполнен.', ephemeral: true }); } catch (e) { try { await interaction.followUp({ content: '✅ Вы освободили плеер. Запрос выполнен.', ephemeral: true }); } catch(ignore){} }
       try { const logCh = await client.channels.fetch(LOG_CHANNEL_ID).catch(()=>null); if (logCh) await logCh.send(`✅ Владелец <@${user.id}> освободил плеер по запросу <@${requesterId}> (сервер: ${guildId})`); } catch(e){}
@@ -288,13 +288,12 @@ async function handleMusicButton(interaction) {
         // Update public status message about owner
         try { await _updateStatusChannel(guild.id, client); } catch (e) {}
         // Show owner menu
+        // New single-panel owner controls: Find, VK Chart, Stop
         const embed = createMusicMenuEmbed();
         const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('music_radio').setLabel('📻 Радио').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('music_own').setLabel('🎵 Своя музыка').setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId('music_link').setLabel('🔗 Ссылка').setStyle(ButtonStyle.Secondary).setDisabled(true),
-          new ButtonBuilder().setCustomId('music_back').setLabel('← Назад').setStyle(ButtonStyle.Danger),
-          new ButtonBuilder().setCustomId('music_release').setLabel('Остановить бота').setStyle(ButtonStyle.Danger)
+          new ButtonBuilder().setCustomId('music_find').setLabel('🔎 Найти музыку').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('music_vk_chart').setLabel('📈 Чарт VK').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId('music_release').setLabel('⏹️ Остановить плеер').setStyle(ButtonStyle.Danger)
         );
         // Update main control message - try to update stored message
         let updated = await _updateMainControlMessage(guild.id, client, [embed], [row]);
@@ -337,8 +336,8 @@ async function handleMusicButton(interaction) {
         await _updateStatusChannel(guild.id, client).catch(()=>{});
         const embed = new EmbedBuilder().setTitle('⏹️ Плеер отключён администратором').setColor(0xE74C3C).setDescription(`Плеер принудительно отключён администратором <@${user.id}>. Ранее был занят пользователем <@${targetOwnerId}>.`);
         // Reset main control message to register view
-        const registerEmbed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы начать пользоваться ботом (первый нажимает — становится владельцем плеера).');
-        const registerRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary));
+        const registerEmbed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы занять плеер (первый нажимает — становится владельцем плеера).');
+        const registerRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary));
         await _updateMainControlMessage(guild.id, client, [registerEmbed], [registerRow]);
         try { await interaction.reply({ embeds: [embed] }); } catch (e) {}
       } catch (e) { console.error('music_admin_release handler error', e); try { await interaction.reply({ content: 'Ошибка при выполнении админ‑отключения.', ephemeral: true }); } catch(ignore){} }
@@ -348,7 +347,7 @@ async function handleMusicButton(interaction) {
     // ===== CHECK OWNER FOR ALL OTHER ACTIONS =====
     // If no owner, user must register first
     if (!ownerId) {
-      try { await interaction.reply({ content: '🔒 Плеер свободен. Нажмите «Начать пользоваться», чтобы получить доступ.', ephemeral: true }); } catch (e) {}
+      try { await interaction.reply({ content: '🔒 Плеер свободен. Нажмите «Занять плеер», чтобы получить доступ.', ephemeral: true }); } catch (e) {}
       return;
     }
 
@@ -374,8 +373,8 @@ async function handleMusicButton(interaction) {
         try { const threadCh = await client.channels.fetch('1446846080573771877').catch(()=>null); if (threadCh) await threadCh.send(`⏹️ Владелец <@${user.id}> остановил плеер на сервере **${guild.name}**`); } catch(e){}
         
         // Reset main message to register view
-        const embed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы начать пользоваться ботом (первый нажимает — становится владельцем плеера).');
-        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary));
+        const embed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы занять плеер (первый нажимает — становится владельцем плеера).');
+        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary));
         await _updateMainControlMessage(guild.id, client, [embed], [row]);
         
         return await interaction.reply({ content: '⏹️ Вы остановили бота и освободили доступ.', ephemeral: true });
@@ -383,6 +382,86 @@ async function handleMusicButton(interaction) {
         console.error('music_release error', e);
         try { await interaction.reply({ content: '❌ Ошибка при остановке.', ephemeral: true }); } catch (e2) {}
       }
+      return;
+    }
+
+    // OPEN FIND/SEARCH PANEL (owner only)
+    if (customId === 'music_find') {
+      try {
+        const embed = new EmbedBuilder()
+          .setTitle('🔎 Поиск музыки')
+          .setColor(0x7289DA)
+          .setDescription('Используйте кнопки ниже: лупа — поиск, плюс — добавить в очередь, пауза/далее — управление.');
+
+        const row1 = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('music_custom_search').setLabel('🔍 Лупа — Поиск').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId('music_custom_queue').setLabel('➕ Плюс — Добавить').setStyle(ButtonStyle.Primary)
+        );
+        const row2 = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('music_pause').setLabel('⏸ Пауза').setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId('music_skip').setLabel('⏭ Следующий').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('music_add_fav').setLabel('❤️ В избранное').setStyle(ButtonStyle.Success)
+        );
+        const row3 = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId('music_release').setLabel('⏹️ Остановить плеер').setStyle(ButtonStyle.Danger)
+        );
+
+        await _updateMainControlMessage(guild.id, client, [embed], [row1, row2, row3]);
+        try { await interaction.reply({ content: '✅ Меню поиска отображено.', ephemeral: true }); } catch (e) {}
+      } catch (e) { console.error('music_find handler error', e); try { await interaction.reply({ content: 'Ошибка при открытии меню поиска.', ephemeral: true }); } catch(ignore){} }
+      return;
+    }
+
+    // VK CHART: play configured VK chart stream (requires VK_CHART_URL in env/config)
+    if (customId === 'music_vk_chart') {
+      try {
+        let memberRef = member;
+        if ((!memberRef || !memberRef.voice || !memberRef.voice.channel) && guild) {
+          try { memberRef = await guild.members.fetch(user.id).catch(() => null); } catch (e) { memberRef = null; }
+        }
+        const voiceChannel = memberRef?.voice?.channel;
+        if (!voiceChannel) {
+          const embed = new EmbedBuilder().setTitle('❌ Не подключены к голосовому каналу').setColor(0xFF5252).setDescription('Подключитесь к голосовому каналу и попробуйте снова.');
+          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger));
+          await _updateMainControlMessage(guild.id, client, [embed], [row]);
+          try { await interaction.reply({ content: '❌ Вы не в голосовом канале.', ephemeral: true }); } catch (e) {}
+          return;
+        }
+
+        const cfg = require('../config');
+        if (!cfg.vkChartUrl) {
+          try { await interaction.reply({ content: '❌ Чарт VK не настроен. Установите переменную окружения `VK_CHART_URL` в конфиге.', ephemeral: true }); } catch (e) {}
+          return;
+        }
+
+        // Try to play as radio stream
+        try {
+          const radioStream = { url: cfg.vkChartUrl };
+          const ok = await musicPlayer.playRadio(guild, voiceChannel, radioStream, interaction.channel, user.id);
+          if (!ok) {
+            const embed = new EmbedBuilder().setTitle('❌ Не удалось подключиться к чарту VK').setColor(0xFF5252).setDescription('Попробуйте ещё раз');
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger));
+            await _updateMainControlMessage(guild.id, client, [embed], [row]);
+            try { await interaction.reply({ content: '❌ Ошибка подключения.', ephemeral: true }); } catch (e) {}
+            return;
+          }
+
+          activeRadios.set(guild.id, { radio: { label: 'VK Chart' }, userId: user.id });
+          const embed = createPlayerControlsEmbed('VK Chart');
+          const controlRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('music_release').setLabel('⏹️ Остановить плеер').setStyle(ButtonStyle.Danger)
+          );
+          await _updateMainControlMessage(guild.id, client, [embed], [controlRow]);
+          try { await interaction.reply({ content: `▶️ Включаю Чарт VK...`, ephemeral: true }); } catch (e) {}
+        } catch (err) {
+          console.error('Error playing VK chart:', err);
+          const embed = new EmbedBuilder().setTitle('❌ Ошибка при подключении').setColor(0xFF5252).setDescription(err && err.message ? String(err.message).slice(0, 200) : 'Ошибка');
+          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger));
+          await _updateMainControlMessage(guild.id, client, [embed], [row]);
+          try { await interaction.reply({ content: '❌ Ошибка.', ephemeral: true }); } catch (e) {}
+        }
+      } catch (e) { console.error('music_vk_chart handler error', e); try { await interaction.reply({ content: 'Ошибка при запуске чарта VK.', ephemeral: true }); } catch(ignore){} }
       return;
     }
 
@@ -457,11 +536,9 @@ async function handleMusicButton(interaction) {
     if (customId === 'music_menu') {
       const embed = createMusicMenuEmbed();
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_radio').setLabel('📻 Радио').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('music_own').setLabel('🎵 Своя музыка').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('music_link').setLabel('🔗 Ссылка').setStyle(ButtonStyle.Secondary).setDisabled(true),
-        new ButtonBuilder().setCustomId('music_back').setLabel('← Назад').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('music_release').setLabel('Остановить бота').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('music_find').setLabel('🔎 Найти музыку').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('music_vk_chart').setLabel('📈 Чарт VK').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('music_release').setLabel('⏹️ Остановить плеер').setStyle(ButtonStyle.Danger)
       );
       await _updateMainControlMessage(guild.id, client, [embed], [row]);
       try { await interaction.reply({ content: '✅ Меню обновлено.', ephemeral: true }); } catch (e) {}
@@ -628,172 +705,26 @@ async function handleMusicButton(interaction) {
       return;
     }
 
-    // RADIO MENU
-    if (customId === 'music_radio') {
-      const embed = createRadioListEmbed();
-      const radioButtons = radios.map((radio) =>
-        new ButtonBuilder()
-          .setCustomId(`radio_play_${radio.id}`)
-          .setLabel(radio.label.substring(0, 80))
-          .setStyle(ButtonStyle.Success)
-      );
-      const rows = [];
-      for (let i = 0; i < radioButtons.length; i += 5) {
-        rows.push(new ActionRowBuilder().addComponents(radioButtons.slice(i, i + 5)));
-      }
-      rows.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger)
-      ));
-      await _updateMainControlMessage(guild.id, client, [embed], rows);
-      try { await interaction.reply({ content: '✅ Список радио обновлен.', ephemeral: true }); } catch (e) {}
-      return;
-    }
+    // RADIO MENU - DISABLED (code preserved for re-enable)
+    // Removed to simplify main UX
 
-    // PLAY RADIO STATION
-    if (customId.startsWith('radio_play_')) {
-      const radioId = customId.replace('radio_play_', '');
-      const radio = radios.find(r => r.id === radioId);
-      
-      if (!radio) {
-        const embed = new EmbedBuilder().setTitle('❌ Радиостанция не найдена').setColor(0xFF5252);
-        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_radio').setLabel('← Назад').setStyle(ButtonStyle.Danger));
-        await _updateMainControlMessage(guild.id, client, [embed], [row]);
-        try { await interaction.reply({ content: '❌ Станция не найдена.', ephemeral: true }); } catch (e) {}
-        return;
-      }
+    // PLAY RADIO STATION - DISABLED (code preserved for re-enable)
+    // Removed to simplify main UX
 
-      let memberRef = member;
-      if ((!memberRef || !memberRef.voice || !memberRef.voice.channel) && guild) {
-        try { memberRef = await guild.members.fetch(user.id).catch(() => null); } catch (e) { memberRef = null; }
-      }
-      const voiceChannel = memberRef?.voice?.channel;
-      if (!voiceChannel) {
-        const embed = new EmbedBuilder().setTitle('❌ Не подключены к голосовому каналу').setColor(0xFF5252);
-        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_radio').setLabel('← Назад').setStyle(ButtonStyle.Danger));
-        await _updateMainControlMessage(guild.id, client, [embed], [row]);
-        try { await interaction.reply({ content: '❌ Вы не в голосовом канале.', ephemeral: true }); } catch (e) {}
-        return;
-      }
-
-      try {
-        const radioStream = { url: radio.url };
-        const ok = await musicPlayer.playRadio(guild, voiceChannel, radioStream, interaction.channel, user.id);
-        if (!ok) {
-          const embed = new EmbedBuilder().setTitle('❌ Не удалось подключиться').setColor(0xFF5252).setDescription('Попробуйте ещё раз');
-          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_radio').setLabel('← Назад').setStyle(ButtonStyle.Danger));
-          await _updateMainControlMessage(guild.id, client, [embed], [row]);
-          try { await interaction.reply({ content: '❌ Ошибка подключения.', ephemeral: true }); } catch (e) {}
-          return;
-        }
-
-        activeRadios.set(guild.id, { radio, userId: user.id });
-
-        const embed = createPlayerControlsEmbed(radio.label);
-        const controlRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('radio_volume_down').setLabel('🔉 Тише').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('radio_next_station').setLabel('📻 Другая станция').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('radio_volume_up').setLabel('🔊 Громче').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('radio_stop').setLabel('⏹️ Стоп').setStyle(ButtonStyle.Danger)
-        );
-        await _updateMainControlMessage(guild.id, client, [embed], [controlRow]);
-        try { await interaction.reply({ content: `▶️ Включаю ${radio.label}...`, ephemeral: true }); } catch (e) {}
-      } catch (err) {
-        console.error('Error playing radio:', err);
-        const embed = new EmbedBuilder().setTitle('❌ Ошибка при подключении').setColor(0xFF5252).setDescription(err && err.message ? String(err.message).slice(0, 200) : 'Ошибка');
-        const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_radio').setLabel('← Назад').setStyle(ButtonStyle.Danger));
-        await _updateMainControlMessage(guild.id, client, [embed], [row]);
-        try { await interaction.reply({ content: '❌ Ошибка.', ephemeral: true }); } catch (e) {}
-      }
-      return;
-    }
-
-    // VOLUME CONTROLS
-    if (customId === 'radio_volume_up') {
-      try {
-        const newVol = await musicPlayer.changeVolume(guild, 0.1);
-        const state = activeRadios.get(guild.id) || {};
-        const embed = createPlayerControlsEmbed(state.radio?.label || 'Радио');
-        const controlRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('radio_volume_down').setLabel('🔉 Тише').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('radio_next_station').setLabel('📻 Другая станция').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('radio_volume_up').setLabel('🔊 Громче').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('radio_stop').setLabel('⏹️ Стоп').setStyle(ButtonStyle.Danger)
-        );
-        await _updateMainControlMessage(guild.id, client, [embed], [controlRow]);
-        try { await interaction.reply({ content: `🔊 Громкость: ${Math.round(newVol * 100)}%`, ephemeral: true }); } catch (e) {}
-      } catch (err) {
-        try { await interaction.reply({ content: '❌ Ошибка при изменении громкости', ephemeral: true }); } catch (e) {}
-      }
-      return;
-    }
-
-    if (customId === 'radio_volume_down') {
-      try {
-        const newVol = await musicPlayer.changeVolume(guild, -0.1);
-        const state = activeRadios.get(guild.id) || {};
-        const embed = createPlayerControlsEmbed(state.radio?.label || 'Радио');
-        const controlRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('radio_volume_down').setLabel('🔉 Тише').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('radio_next_station').setLabel('📻 Другая станция').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('radio_volume_up').setLabel('🔊 Громче').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('radio_stop').setLabel('⏹️ Стоп').setStyle(ButtonStyle.Danger)
-        );
-        await _updateMainControlMessage(guild.id, client, [embed], [controlRow]);
-        try { await interaction.reply({ content: `🔉 Громкость: ${Math.round(newVol * 100)}%`, ephemeral: true }); } catch (e) {}
-      } catch (err) {
-        try { await interaction.reply({ content: '❌ Ошибка при изменении громкости', ephemeral: true }); } catch (e) {}
-      }
-      return;
-    }
-
-    // SWITCH STATION
-    if (customId === 'radio_next_station') {
-      const embed = createRadioListEmbed();
-      const radioButtons = radios.map((radio) =>
-        new ButtonBuilder()
-          .setCustomId(`radio_play_${radio.id}`)
-          .setLabel(radio.label.substring(0, 80))
-          .setStyle(ButtonStyle.Success)
-      );
-      const rows = [];
-      for (let i = 0; i < radioButtons.length; i += 5) {
-        rows.push(new ActionRowBuilder().addComponents(radioButtons.slice(i, i + 5)));
-      }
-      rows.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger)
-      ));
-      await _updateMainControlMessage(guild.id, client, [embed], rows);
-      try { await interaction.reply({ content: '📻 Выберите станцию.', ephemeral: true }); } catch (e) {}
-      return;
-    }
-
-    // RADIO STOP
-    if (customId === 'radio_stop') {
-      try {
-        await musicPlayer.stop(guild);
-        activeRadios.delete(guild.id);
-        await _clearMusicOwner(guild.id).catch(()=>{});
-        try { await _updateStatusChannel(guild.id, client); } catch (e) {}
-        const registerEmbed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы начать пользоваться ботом (первый нажимает — становится владельцем плеера).');
-        const registerRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('music_register').setLabel('Начать пользоваться').setStyle(ButtonStyle.Primary));
-        await _updateMainControlMessage(guild.id, client, [registerEmbed], [registerRow]);
-        try { await interaction.reply({ content: '⏹️ Радио остановлено. Доступ освобожден.', ephemeral: true }); } catch (e) {}
-      } catch (err) {
-        try { await interaction.reply({ content: '❌ Ошибка при остановке', ephemeral: true }); } catch (e) {}
-      }
-      return;
-    }
+    // RADIO VOLUME & STATION CONTROLS - DISABLED (code preserved for re-enable)
+    // Removed to simplify main UX
 
     // CUSTOM MUSIC MENU
     if (customId === 'music_own') {
+      // local find menu replaced by search modal trigger
       const embed = new EmbedBuilder()
-        .setTitle('🎵 Своя музыка')
+        .setTitle('🎵 Найти музыку')
         .setColor(0x7289DA)
-        .setDescription('Воспроизведение музыки по названию.');
+        .setDescription('Найдите трек по запросу или добавьте в очередь.');
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_custom_search').setLabel('🔎 Найти и играть').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('music_custom_queue').setLabel('➕ Добавить в очередь').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('music_menu').setLabel('← В меню').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('music_custom_search').setLabel('🔍 Лупа — Поиск').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('music_custom_queue').setLabel('➕ Плюс — Добавить').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger)
       );
       await _updateMainControlMessage(guild.id, client, [embed], [row]);
       try { await interaction.reply({ content: '✅ Меню музыки обновлено.', ephemeral: true }); } catch (e) {}
@@ -802,9 +733,37 @@ async function handleMusicButton(interaction) {
 
     // CUSTOM MUSIC SEARCH MODAL
     if (customId === 'music_custom_search') {
+      // Show source chooser: YouTube vs VK
+      const cfg = require('../config');
+      const row = new ActionRowBuilder();
+      
+      row.addComponents(
+        new ButtonBuilder().setCustomId('music_search_youtube').setLabel('🎬 YouTube').setStyle(ButtonStyle.Primary)
+      );
+      
+      // Only show VK button if service token is configured
+      if (cfg.vkServiceToken) {
+        row.addComponents(
+          new ButtonBuilder().setCustomId('music_search_vk').setLabel('📱 VKontakte').setStyle(ButtonStyle.Success)
+        );
+      }
+      
+      const embed = new EmbedBuilder()
+        .setTitle('🔍 Выберите источник')
+        .setColor(0x7289DA)
+        .setDescription('Где искать музыку?');
+      
+      await _updateMainControlMessage(guild.id, client, [embed], [row]);
+      try { await interaction.reply({ content: '✅ Выберите источник поиска.', ephemeral: true }); } catch (e) {}
+      return;
+    }
+
+    // HANDLE SOURCE SELECTION
+    if (customId === 'music_search_youtube' || customId === 'music_search_vk') {
+      const isVK = customId === 'music_search_vk';
       const modal = new ModalBuilder()
-        .setCustomId('music_search_modal')
-        .setTitle('🔎 Найти песню');
+        .setCustomId(isVK ? 'music_search_vk_modal' : 'music_search_modal')
+        .setTitle(isVK ? '🔍 Найти в VK' : '🔍 Найти на YouTube');
       const songInput = new TextInputBuilder()
         .setCustomId('song_name')
         .setLabel('Название песни (исполнитель)')

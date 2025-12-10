@@ -145,7 +145,7 @@ async function updateControlMessageWithError(guildId, client, content) {
           );
         } else {
           row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Начать пользоваться').setStyle(ButtonStyle.Primary)
+            new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary)
           );
         }
         const posted = await ch.send({ embeds: [embed], components: [row] }).catch(() => null);
@@ -173,7 +173,7 @@ async function updateControlMessageWithError(guildId, client, content) {
       );
     } else {
       row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Начать пользоваться').setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary)
       );
     }
     
@@ -262,7 +262,7 @@ async function updateControlMessageNowPlaying(guildId, client, title, currentMs,
       }
     } else {
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Начать пользоваться').setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary)
       );
       components.push(row);
     }

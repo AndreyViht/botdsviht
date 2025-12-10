@@ -42,7 +42,7 @@ function getMainControlRow() {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('cabinet_main').setLabel('👤 Личный кабинет').setStyle(ButtonStyle.Primary),
     // Single control message: register first-presser as music owner from main panel
-    new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Начать пользоваться').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('info_btn').setLabel('ℹ️ Информация').setStyle(ButtonStyle.Secondary).setDisabled(true)
   );
   return row;

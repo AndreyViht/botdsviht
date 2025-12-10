@@ -9,7 +9,7 @@ const config = require('../config');
  */
 
 const VK_API_BASE = 'https://api.vk.com/method';
-const VK_API_VERSION = '5.131';
+const VK_API_VERSION = '5.199'; // Updated to latest stable version
 
 const vkHandler = {
   // In-memory token storage (use DB in production)
@@ -83,8 +83,11 @@ const vkHandler = {
     try {
       const token = userToken || config.vkServiceToken;
       if (!token) {
+        console.error('searchAudio: No VK token provided');
         throw new Error('No VK token provided. Set VK_SERVICE_TOKEN or use user OAuth token.');
       }
+
+      console.log(`[VK Search] Query: "${query}", Token: ${token.substring(0, 10)}...`);
 
       const response = await axios.get(`${VK_API_BASE}/audio.search`, {
         params: {
@@ -92,15 +95,20 @@ const vkHandler = {
           count: 10,
           access_token: token,
           v: VK_API_VERSION
-        }
+        },
+        timeout: 10000
       });
 
+      console.log(`[VK Search Response]`, response.data);
+
       if (response.data.error) {
-        console.error('VK search error:', response.data.error.error_msg);
-        throw new Error(`VK API error: ${response.data.error.error_msg}`);
+        console.error('VK search error:', response.data.error.error_msg || JSON.stringify(response.data.error));
+        throw new Error(`VK API error: ${response.data.error.error_msg || 'Unknown error'}`);
       }
 
       const items = response.data.response?.items || [];
+      console.log(`[VK Search] Found ${items.length} results`);
+      
       return items.map(audio => ({
         id: audio.id,
         owner_id: audio.owner_id,

@@ -279,11 +279,13 @@ async function handleMusicButton(interaction) {
         }
         // If we're here, either no owner or it's the current user — set/confirm ownership
         await _setMusicOwner(guild.id, user.id);
-        // Log who occupied the player
-        try {
-          const logCh = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
-          if (logCh) await logCh.send(`🔒 Плеер занят пользователем <@${user.id}> на сервере **${guild.name}**`);
-        } catch (e) { /* ignore */ }
+        // Log who occupied the player (only if LOG_CHANNEL_ID is different from STATUS_CHANNEL)
+        if (LOG_CHANNEL_ID !== STATUS_CHANNEL_ID) {
+          try {
+            const logCh = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+            if (logCh) await logCh.send(`🔒 Плеер занят пользователем <@${user.id}> на сервере **${guild.name}**`);
+          } catch (e) { /* ignore */ }
+        }
         // Update public status message about owner
         try { await _updateStatusChannel(guild.id, client); } catch (e) {}
         // Show owner menu
@@ -329,8 +331,10 @@ async function handleMusicButton(interaction) {
         // Stop music and clear owner
         try { await musicPlayer.stop(guild); } catch (e) { console.warn('admin_release: stop failed', e); }
         await _clearMusicOwner(guild.id);
-        // Log admin release
-        try { const logCh = await client.channels.fetch(LOG_CHANNEL_ID).catch(()=>null); if (logCh) await logCh.send(`⛔️ Админ <@${user.id}> отключил плеер на сервере **${guild.name}** (владелец: <@${targetOwnerId}>)`); } catch(e){}
+        // Log admin release (only if LOG_CHANNEL_ID is different from STATUS_CHANNEL)
+        if (LOG_CHANNEL_ID !== STATUS_CHANNEL_ID) {
+          try { const logCh = await client.channels.fetch(LOG_CHANNEL_ID).catch(()=>null); if (logCh) await logCh.send(`⛔️ Админ <@${user.id}> отключил плеер на сервере **${guild.name}** (владелец: <@${targetOwnerId}>)`); } catch(e){}
+        }
         await _updateStatusChannel(guild.id, client).catch(()=>{});
         const embed = new EmbedBuilder().setTitle('⏹️ Плеер отключён администратором').setColor(0xE74C3C).setDescription(`Плеер принудительно отключён администратором <@${user.id}>. Ранее был занят пользователем <@${targetOwnerId}>.`);
         // Reset main control message to register view
@@ -366,8 +370,10 @@ async function handleMusicButton(interaction) {
         try { await musicPlayer.stop(guild); } catch (e) { console.warn('music_release: stop failed', e); }
         await _clearMusicOwner(guild.id);
         try { await _updateStatusChannel(guild.id, client); } catch (e) {}
-        // Log owner-initiated release
-        try { const logCh = await client.channels.fetch(LOG_CHANNEL_ID).catch(()=>null); if (logCh) await logCh.send(`⏹️ Владелец <@${user.id}> остановил плеер на сервере **${guild.name}**`); } catch(e){}
+        // Log owner-initiated release (only if LOG_CHANNEL_ID is different from STATUS_CHANNEL)
+        if (LOG_CHANNEL_ID !== STATUS_CHANNEL_ID) {
+          try { const logCh = await client.channels.fetch(LOG_CHANNEL_ID).catch(()=>null); if (logCh) await logCh.send(`⏹️ Владелец <@${user.id}> остановил плеер на сервере **${guild.name}**`); } catch(e){}
+        }
         
         // Reset main message to register view
         const embed = new EmbedBuilder().setTitle('🎵 Управление аудио').setColor(0x2C3E50).setDescription('Нажмите кнопку, чтобы занять плеер (первый нажимает — становится владельцем плеера).');

@@ -110,79 +110,17 @@ async function saveQueueForGuild(guildId) {
 
 // Helper: update control message with error or status and back button
 async function updateControlMessageWithError(guildId, client, content) {
+  // Silent: do not post error embeds to the control channel anymore.
+  // Previously this function updated the public control panel with error messages
+  // (e.g. "❌ Ошибка при воспроизведении.") which produced unwanted UI spam.
+  // Now we log the content server-side and return false so callers can fallback
+  // to private notifications if needed.
   try {
-    const panelKey = `musicControl_${guildId}`;
-    const panelRec = db.get(panelKey);
-    if (!panelRec || !panelRec.channelId || !panelRec.messageId) {
-      console.warn('No control message found in DB for guild', guildId);
-      return false;
-    }
-    
-    if (!client || !client.channels) {
-      console.warn('No client available to update control message');
-      return false;
-    }
-    
-    const ch = await client.channels.fetch(panelRec.channelId).catch(() => null);
-    if (!ch || !ch.messages) {
-      console.warn('Could not fetch control message channel', panelRec.channelId);
-      return false;
-    }
-    
-    const msg = await ch.messages.fetch(panelRec.messageId).catch(() => null);
-    if (!msg || !msg.edit) {
-      console.warn('Could not fetch control message', panelRec.messageId);
-      // Message probably deleted -> recreate a replacement control message and persist
-      try {
-        const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
-        const embed = new EmbedBuilder().setTitle(content).setColor(0xFF5252);
-        // If there's an owner, show owner controls; otherwise show the register button so users can claim the player
-        let row;
-        if (panelRec && panelRec.owner) {
-          row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('music_release').setLabel('Остановить бота').setStyle(ButtonStyle.Danger)
-          );
-        } else {
-          row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary)
-          );
-        }
-        const posted = await ch.send({ embeds: [embed], components: [row] }).catch(() => null);
-        if (posted) {
-          // preserve existing owner if present
-          const rec = { channelId: panelRec.channelId, messageId: posted.id };
-          if (panelRec.owner) rec.owner = panelRec.owner;
-          await db.set(panelKey, rec).catch(() => {});
-          return true;
-        }
-      } catch (e) {
-        console.warn('Failed to recreate control message after missing', e && e.message);
-      }
-      return false;
-    }
-    
-    const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
-    const embed = new EmbedBuilder().setTitle(content).setColor(0xFF5252);
-    // Choose appropriate controls depending on whether an owner is set
-    let row;
-    if (panelRec && panelRec.owner) {
-      row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_menu').setLabel('← Назад').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('music_release').setLabel('Остановить бота').setStyle(ButtonStyle.Danger)
-      );
-    } else {
-      row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary)
-      );
-    }
-    
-    await msg.edit({ embeds: [embed], components: [row] });
-    return true;
+    console.warn('[updateControlMessageWithError] Suppressed public message:', content);
   } catch (e) {
-    console.error('updateControlMessageWithError failed', e && e.message);
-    return false;
+    /* ignore */
   }
+  return false;
 }
 
 // Update control message to show now playing with progress

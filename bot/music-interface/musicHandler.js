@@ -79,52 +79,9 @@ async function _clearMusicOwner(guildId) {
   } catch (e) { console.error('Failed to clear music owner in DB', e); }
 }
 
-// Update the public status message in STATUS_CHANNEL_ID about current owner
+// Status channel updates disabled - using single startup message instead
 async function _updateStatusChannel(guildId, client) {
-  try {
-    if (!client) return;
-    const controlKey = `musicControl_${guildId}`;
-    const controlRec = db.get(controlKey) || {};
-    const ownerId = controlRec.owner || null;
-
-    const key = `musicStatus_${guildId}`;
-    const rec = db.get(key) || {};
-
-    const ch = await client.channels.fetch(STATUS_CHANNEL_ID).catch(() => null);
-    if (!ch) return;
-
-    let embed;
-    let components = [];
-    if (ownerId) {
-      embed = new EmbedBuilder().setTitle('🎛️ Статус: Плеер занят').setColor(0xE74C3C)
-        .setDescription(`Плеер сейчас занят пользователем <@${ownerId}>.`)
-        .addFields({ name: 'Действия', value: 'Админ может отключить плеер ниже.' });
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`music_admin_release_${guildId}_${ownerId}`).setLabel('Отключить (админ)').setStyle(ButtonStyle.Danger)
-      );
-      components = [row];
-    } else {
-      embed = new EmbedBuilder().setTitle('🎛️ Статус: Плеер свободен').setColor(0x2ECC71)
-        .setDescription('Плеер свободен — нажмите «Занять плеер» в панели управления, чтобы занять его.');
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('music_register').setLabel('🎵 Занять плеер').setStyle(ButtonStyle.Primary)
-      );
-      components = [row];
-    }
-
-    if (rec && rec.messageId) {
-      const old = await ch.messages.fetch(rec.messageId).catch(() => null);
-      if (old) {
-        await old.edit({ embeds: [embed], components }).catch(() => null);
-        return;
-      }
-    }
-
-    const msg = await ch.send({ embeds: [embed], components }).catch(() => null);
-    if (msg) {
-      await db.set(key, { channelId: ch.id, messageId: msg.id });
-    }
-  } catch (e) { console.error('_updateStatusChannel error', e); }
+  // No-op: status updates disabled
 }
 
 // Update the MAIN control message in DB, not interaction message

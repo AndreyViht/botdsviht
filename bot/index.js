@@ -1074,6 +1074,23 @@ client.once('ready', async () => {
   // Ensure DB is fully initialized
   await db.ensureReady();
   console.log('DB ready, proceeding with startup status report');
+  
+  // Post "Плеер в разработке" startup message to control panel channel
+  const CONTROL_PANEL_CHANNEL_ID = '1443194196172476636';
+  try {
+    const controlChannel = await client.channels.fetch(CONTROL_PANEL_CHANNEL_ID).catch(() => null);
+    if (controlChannel && controlChannel.isTextBased && controlChannel.isTextBased()) {
+      const startupEmbed = new EmbedBuilder()
+        .setTitle('🎵 Плеер в разработке')
+        .setColor(0xFFA500)
+        .setDescription('Музыкальный плеер находится в процессе разработки и доработки.\nОставайтесь в курсе!')
+        .setTimestamp();
+      await controlChannel.send({ embeds: [startupEmbed] }).catch(() => null);
+      console.log('Control panel startup message posted to', CONTROL_PANEL_CHANNEL_ID);
+    }
+  } catch (e) {
+    console.warn('Failed to post control panel startup message:', e && e.message ? e.message : e);
+  }
   // Auto-register slash commands if enabled via env
   try {
     const autoReg = process.env.AUTO_REGISTER_COMMANDS === 'true' || process.env.AUTO_REGISTER_COMMANDS === '1';

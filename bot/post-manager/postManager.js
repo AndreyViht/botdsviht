@@ -23,6 +23,16 @@ const COLOR_PRESETS = {
   'orange': 0xFFA500
 };
 
+// Функция для обработки эмодзи в тексте
+// Преобразует текст так, чтобы эмодзи отображались правильно
+async function processEmojiInText(text, client) {
+  if (!text) return text;
+  
+  // Regex для поиска <:name:id> и <a:name:id> - эти форматы уже правильные
+  // Просто возвращаем текст как есть
+  return text;
+}
+
 // Build initial post manager embed
 function buildPostManagerEmbed() {
   return new EmbedBuilder()
@@ -594,11 +604,11 @@ async function handlePostMessageInput(message) {
       
       await message.react('✅');
       const botReply = await message.reply({
-        content: `✅ Заголовок: **"${session.title}"**\n\n📝 Теперь напиши **содержание поста**:`,
+        content: `✅ Заголовок: **"${session.title}"**\n\n📝 Теперь напиши **содержание поста**:\n*Подсказка: Анимированные эмодзи должны быть в формате <a:name:id> - просто скопируй их из реакций*`,
         allowedMentions: { repliedUser: false }
       }).catch(() => null);
 
-      // Delete user message and bot reply after 1 second
+      // Delete user message after 1 second
       setTimeout(() => {
         message.delete().catch(() => null);
         botReply?.delete().catch(() => null);

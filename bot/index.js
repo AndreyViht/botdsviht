@@ -615,7 +615,7 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.customId === 'music_search_modal') {
         try {
           // Defer immediately to avoid timeout
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ ephemeral: false }); // Show publicly so users can see the search
           
           const songName = interaction.fields.getTextInputValue('song_name').slice(0, 200);
           const guild = interaction.guild;
@@ -626,7 +626,7 @@ client.on('interactionCreate', async (interaction) => {
             return;
           }
           // Show searching message
-          await interaction.editReply({ content: `🔎 Ищу варианты для "${songName}"...`, ephemeral: true });
+          await interaction.editReply({ content: `🔎 Ищу песню: **"${songName}"**\nПожалуйста, подождите...`, ephemeral: false });
           
           let searchResults = null;
           
@@ -657,18 +657,19 @@ client.on('interactionCreate', async (interaction) => {
             const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
             const select = new StringSelectMenuBuilder()
               .setCustomId(`music_search_select_${searchId}`)
-              .setPlaceholder('Выберите трек')
+              .setPlaceholder('Выберите трек для воспроизведения')
               .setMinValues(1)
               .setMaxValues(Math.min(candidates.length, 5)); // Allow multi-select up to 5
             
             for (let i = 0; i < candidates.length; i++) {
               const c = candidates[i];
-              const label = (c.title || c.url || '').slice(0, 100);
+              const label = (c.title || c.url || '').slice(0, 95);
+              const desc = `Вариант ${i+1}/${candidates.length}`;
               select.addOptions(
                 new StringSelectMenuOptionBuilder()
                   .setLabel(label)
                   .setValue(`${i}`)
-                  .setDescription(`[Вариант ${i+1}]`)
+                  .setDescription(desc)
               );
             }
             components.push(new ActionRowBuilder().addComponents(select));
@@ -679,7 +680,7 @@ client.on('interactionCreate', async (interaction) => {
               const emoji = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'][i];
               buttons.push(new ButtonBuilder()
                 .setCustomId(`music_search_btn_${searchId}_${i}`)
-                .setLabel(`${i+1}. ${(candidates[i].title || candidates[i].url || '').slice(0,20)}...`)
+                .setLabel(`${i+1}. ${(candidates[i].title || candidates[i].url || '').slice(0,15)}...`)
                 .setStyle(ButtonStyle.Secondary)
               );
             }
@@ -691,24 +692,27 @@ client.on('interactionCreate', async (interaction) => {
           // Store candidates temporarily (in memory, with timeout cleanup)
           if (!global._musicSearchCache) global._musicSearchCache = {};
           global._musicSearchCache[searchId] = { candidates, guildId: guild.id, voiceChannelId: voiceChannel.id, userId: interaction.user.id, timestamp: Date.now(), source: searchResults.source };
-          setTimeout(() => { delete global._musicSearchCache[searchId]; }, 60000); // Clear after 60s
+          setTimeout(() => { delete global._musicSearchCache[searchId]; }, 120000); // Clear after 120s
           
-          // Show results
+          // Show results with detailed info
           const resultEmbed = new EmbedBuilder()
-            .setTitle(`🎵 Результаты поиска ${searchResults.source === 'vk' ? '(VK)' : '(YouTube)'}`)
-            .setColor(0x7289DA)
-            .setDescription(`По запросу "${songName}" найдено ${candidates.length} результатов. Выберите трек(и):`)
-            .addFields(candidates.slice(0, 5).map((c, i) => ({
-              name: `${i+1}. ${(c.title || c.url).slice(0,50)}`,
-              value: c.artist ? `${c.artist}` : '—',
-              inline: false
-            })));
+            .setTitle(`🎵 Результаты поиска`)
+            .setColor(0x00FF00)
+            .setDescription(`Найдено ${candidates.length} трек(а) по запросу: **${songName}**\n\nВыберите трек из меню ниже или нажмите на номер:`);
+          
+          // Show all candidates in fields
+          const fields = candidates.slice(0, 10).map((c, i) => ({
+            name: `${i+1}️⃣ ${(c.title || c.url || '').slice(0, 60)}`,
+            value: `🔗 ${c.url ? '[Ссылка]' : 'Трек'}`,
+            inline: false
+          }));
+          resultEmbed.addFields(fields);
           
           try { 
-            await interaction.followUp({ embeds: [resultEmbed], components, ephemeral: true }); 
+            await interaction.editReply({ embeds: [resultEmbed], components, ephemeral: false }); 
           } catch (e) { 
-            console.warn('followUp failed', e); 
-            try { await interaction.channel.send({ embeds: [resultEmbed], components }); } catch (e2) {}
+            console.warn('editReply failed', e); 
+            try { await interaction.followUp({ embeds: [resultEmbed], components, ephemeral: false }); } catch (e2) {}
           }
           return;
         } catch (e) { 

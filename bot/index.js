@@ -845,67 +845,129 @@ async function sendActivityEmbed(guild, embed, channelId = VOICE_LOG_CHANNEL) {
   } catch (e) { console.warn('sendActivityEmbed failed', e && e.message); }
 }
 
-// Voice state: detect server mute/unmute and forced disconnects (kicks)
+// Voice state: detect joins, leaves, server mute/unmute and forced disconnects
 client.on('voiceStateUpdate', async (oldState, newState) => {
   try {
     const guild = oldState.guild || newState.guild;
-    if (!guild) return;
+    if (!guild) {
+      console.warn('[VOICE] No guild found in voiceStateUpdate');
+      return;
+    }
+    
     const member = newState.member || oldState.member;
+    if (!member) {
+      console.warn('[VOICE] No member found in voiceStateUpdate');
+      return;
+    }
 
-    // Вход в голосовой канал
-    try {
-      if (!oldState.channel && newState.channel) {
+    console.log(`[VOICE] Update for ${member.user.tag}: old=${oldState.channel?.name || 'none'} -> new=${newState.channel?.name || 'none'}`);
+
+    // Вход в голосовой канал (новый канал, был без канала или был в другом)
+    if (!oldState.channel && newState.channel) {
+      console.log(`[VOICE] ${member.user.tag} JOINED ${newState.channel.name}`);
+      try {
         const embed = new EmbedBuilder()
           .setTitle('🔊 Вошел в голосовой')
           .setColor(0x4CAF50)
           .setDescription(`<@${member.id}> присоединился к каналу **${newState.channel.name}**`)
           .addFields(
-            { name: 'Сервер', value: `${guild.name}`, inline: true },
+            { name: 'Пользователь', value: `${member.user.tag}`, inline: true },
             { name: 'Канал', value: `${newState.channel.name}`, inline: true },
-            { name: 'Время', value: new Date().toLocaleString('ru-RU'), inline: true }
+            { name: 'Время', value: new Date().toLocaleString('ru-RU'), inline: false }
           )
-          .setThumbnail(member.user.displayAvatarURL())
+          .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
           .setTimestamp();
         await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
+        console.log(`[VOICE] Sent JOIN notification for ${member.user.tag}`);
+      } catch (e) {
+        console.error(`[VOICE] Failed to send JOIN notification: ${e.message}`);
       }
-    } catch (e) {}
+    }
+    // Смена голосового канала (был в канале, перешел в другой)
+    else if (oldState.channel && newState.channel && oldState.channel.id !== newState.channel.id) {
+      console.log(`[VOICE] ${member.user.tag} MOVED from ${oldState.channel.name} to ${newState.channel.name}`);
+      try {
+        const embed = new EmbedBuilder()
+          .setTitle('↔️ Переместился в голосовой')
+          .setColor(0x2196F3)
+          .setDescription(`<@${member.id}> переместился из **${oldState.channel.name}** в **${newState.channel.name}**`)
+          .addFields(
+            { name: 'Из канала', value: `${oldState.channel.name}`, inline: true },
+            { name: 'В канал', value: `${newState.channel.name}`, inline: true }
+          )
+          .setTimestamp();
+        await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
+        console.log(`[VOICE] Sent MOVE notification for ${member.user.tag}`);
+      } catch (e) {
+        console.error(`[VOICE] Failed to send MOVE notification: ${e.message}`);
+      }
+    }
 
     // Server mute/unmute
-    try {
-      if (oldState.serverMute !== newState.serverMute) {
-        const action = newState.serverMute ? 'Выключил микрофон (заглушил)' : 'Включил микрофон (разглушил)';
+    if (oldState.serverMute !== newState.serverMute) {
+      console.log(`[VOICE] ${member.user.tag} serverMute: ${oldState.serverMute} -> ${newState.serverMute}`);
+      try {
+        const action = newState.serverMute ? 'Выключил микрофон' : 'Включил микрофон';
         const audit = await findRecentAuditEntry(guild, e => String(e.targetId) === String(member.id));
-        const by = audit && audit.executor ? `<@${audit.executor.id}>` : 'Неизвестно';
+        const by = audit && audit.executor ? `<@${audit.executor.id}>` : 'система';
         const embed = new EmbedBuilder()
           .setTitle('🔇 Изменение микрофона')
           .setColor(newState.serverMute ? 0xFF5252 : 0x4CAF50)
-          .setDescription(`${by} — ${action} у пользователя <@${member.id}>`)
+          .setDescription(`${by} — ${action} у <@${member.id}>`)
           .addFields(
-            { name: 'Сервер', value: `${guild.name}`, inline: true },
-            { name: 'Пользователь', value: `<@${member.id}>`, inline: true }
+            { name: 'Пользователь', value: `${member.user.tag}`, inline: true },
+            { name: 'Действие', value: action, inline: true }
           )
           .setTimestamp();
         await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
+        console.log(`[VOICE] Sent MUTE notification for ${member.user.tag}`);
+      } catch (e) {
+        console.error(`[VOICE] Failed to send MUTE notification: ${e.message}`);
       }
-    } catch (e) {}
+    }
 
-    // Kicked/disconnected from voice (someone forced them out)
-    try {
-      if (oldState.channel && !newState.channel) {
-        // They left/moved out of voice. Try to find an audit entry that indicates a forced disconnect
+    // Выход из голосового канала
+    if (oldState.channel && !newState.channel) {
+      console.log(`[VOICE] ${member.user.tag} LEFT ${oldState.channel.name}`);
+      try {
+        // Try to find an audit entry that indicates a forced disconnect
         const audit = await findRecentAuditEntry(guild, e => String(e.targetId) === String(member.id));
         const by = audit && audit.executor ? `<@${audit.executor.id}>` : null;
-        const title = by ? '👢 Выгнан из голосового' : '🏃 Вышел из голосового';
-        const color = by ? 0xFF7043 : 0x607D8B;
-        const desc = by ? `${by} выгнал(а) <@${member.id}> из голосового канала ${oldState.channel ? `**${oldState.channel.name}**` : ''}` : `<@${member.id}> покинул(а) голосовой канал ${oldState.channel ? `**${oldState.channel.name}**` : ''}`;
-        const embed = new EmbedBuilder().setTitle(title).setColor(color).setDescription(desc).addFields(
-          { name: 'Сервер', value: `${guild.name}`, inline: true },
-          { name: 'Канал', value: oldState.channel ? `${oldState.channel.name}` : '—', inline: true }
-        ).setTimestamp();
-        await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
+        
+        if (by) {
+          // Был кик
+          const embed = new EmbedBuilder()
+            .setTitle('👢 Выгнан из голосового')
+            .setColor(0xFF7043)
+            .setDescription(`${by} выгнал(а) <@${member.id}> из голосового канала **${oldState.channel.name}**`)
+            .addFields(
+              { name: 'Пользователь', value: `${member.user.tag}`, inline: true },
+              { name: 'Из канала', value: `${oldState.channel.name}`, inline: true }
+            )
+            .setTimestamp();
+          await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
+          console.log(`[VOICE] Sent KICK notification for ${member.user.tag}`);
+        } else {
+          // Просто вышел
+          const embed = new EmbedBuilder()
+            .setTitle('🏃 Вышел из голосового')
+            .setColor(0x607D8B)
+            .setDescription(`<@${member.id}> покинул(а) голосовой канал **${oldState.channel.name}**`)
+            .addFields(
+              { name: 'Пользователь', value: `${member.user.tag}`, inline: true },
+              { name: 'Из канала', value: `${oldState.channel.name}`, inline: true }
+            )
+            .setTimestamp();
+          await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
+          console.log(`[VOICE] Sent LEAVE notification for ${member.user.tag}`);
+        }
+      } catch (e) {
+        console.error(`[VOICE] Failed to send LEAVE/KICK notification: ${e.message}`);
       }
-    } catch (e) {}
-  } catch (e) { console.error('voiceStateUpdate handler failed', e && e.message); }
+    }
+  } catch (e) {
+    console.error('[VOICE] voiceStateUpdate handler error:', e && e.message ? e.message : e);
+  }
 });
 
 // Nickname change logging
@@ -1120,11 +1182,29 @@ client.on('messageCreate', async (message) => {
 // Track bot startup time for uptime counter
 const botStartTime = Date.now();
 client.once('ready', async () => {
-  console.log(`Ready as ${client.user.tag}`);
+  console.log(`✅ Ready as ${client.user.tag}`);
   console.log('Config flags:', { messageContentIntent, guildMembersIntent });
   // Ensure DB is fully initialized
   await db.ensureReady();
-  console.log('DB ready, proceeding with startup status report');
+  console.log('✅ DB ready, proceeding with startup status report');
+  
+  // Отправляем уведомление о готовности бота в канал логов
+  try {
+    const VOICE_LOG_CHANNEL = '1446801072344662149';
+    const ch = await client.channels.fetch(VOICE_LOG_CHANNEL).catch(() => null);
+    if (ch && ch.isTextBased?.()) {
+      const embed = new EmbedBuilder()
+        .setTitle('✅ Бот перезагружен')
+        .setColor(0x4CAF50)
+        .setDescription(`Viht Bot готов к работе`)
+        .addFields(
+          { name: 'Время', value: new Date().toLocaleString('ru-RU'), inline: true },
+          { name: 'Статус', value: '🟢 Online', inline: true }
+        )
+        .setTimestamp();
+      await ch.send({ embeds: [embed] }).catch(() => null);
+    }
+  } catch (e) { console.warn('Failed to send bot ready notification:', e && e.message); }
   
   // Post Viht player v.4214 panel to control channel
   try {

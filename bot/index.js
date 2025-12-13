@@ -550,6 +550,17 @@ client.on('interactionCreate', async (interaction) => {
         }
         return;
       }
+      // Handle player panel search select menu
+      if (interaction.customId && interaction.customId.startsWith('player_search_select_')) {
+        try {
+          const playerPanel = require('./music-interface/playerPanel');
+          await playerPanel.handlePlayerPanelSelectMenu(interaction, client);
+        } catch (e) {
+          console.error('player panel select menu error', e);
+          await safeReply(interaction, { content: '❌ Ошибка при выборе трека.', ephemeral: true });
+        }
+        return;
+      }
     }
     if (interaction.isModalSubmit()) {
       // Handle support creation modal submission

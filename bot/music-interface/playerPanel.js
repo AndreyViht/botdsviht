@@ -267,32 +267,85 @@ async function handleSearchModalSubmit(interaction, client) {
       return;
     }
     
-    // Use first result
-    const firstResult = searchResults.candidates[0];
-    const trackUrl = firstResult.url || firstResult.link;
-    const trackTitle = firstResult.title || songQuery;
+    const candidates = searchResults.candidates.slice(0, 10); // Limit to 10
+    const searchId = `player_search_${Date.now()}_${userId}`;
     
-    // Update session
-    session.currentTrack = trackTitle;
-    session.isPlaying = true;
+    // Store search results temporarily
+    if (!global._playerSearchCache) global._playerSearchCache = {};
+    global._playerSearchCache[searchId] = { 
+      candidates, 
+      guildId: session.guildId, 
+      voiceChannelId: session.voiceChannelId, 
+      userId: userId,
+      messageId: interaction.message.id,
+      session: session
+    };
+    setTimeout(() => { delete global._playerSearchCache[searchId]; }, 120000);
     
-    // Update message - now playing
-    const embed = buildPlayingEmbed(session, trackTitle);
-    const row = buildControlRow(true);
+    // Create select menu
+    const components = [];
+    const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
     
-    await interaction.message.edit({ embeds: [embed], components: [row] }).catch(() => null);
-    
-    // Start playing
     try {
-      await musicPlayer.playNow(guild, voiceChannel, trackUrl, interaction.channel, userId).catch(e => {
-        console.warn('playNow error:', e.message);
-      });
+      const select = new StringSelectMenuBuilder()
+        .setCustomId(`player_search_select_${searchId}`)
+        .setPlaceholder('Выберите трек')
+        .setMinValues(1)
+        .setMaxValues(1);
+      
+      for (let i = 0; i < candidates.length && i < 25; i++) {
+        const c = candidates[i];
+        const label = (c.title || c.url || '').slice(0, 95);
+        if (label.length > 0) {
+          select.addOptions(
+            new StringSelectMenuOptionBuilder()
+              .setLabel(label)
+              .setValue(`${i}`)
+              .setDescription(`Вариант ${i+1}/${candidates.length}`)
+          );
+        }
+      }
+      
+      components.push(new (require('discord.js')).ActionRowBuilder().addComponents(select));
     } catch (e) {
-      console.warn('Music playback error:', e.message);
+      console.error('Select menu creation failed:', e.message);
     }
+    
+    // If select menu failed, create buttons
+    if (components.length === 0) {
+      const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+      const buttons = [];
+      for (let i = 0; i < Math.min(candidates.length, 5); i++) {
+        buttons.push(new ButtonBuilder()
+          .setCustomId(`player_search_btn_${searchId}_${i}`)
+          .setLabel(`${i+1}. ${(candidates[i].title || '').slice(0, 20)}...`)
+          .setStyle(ButtonStyle.Success)
+        );
+      }
+      components.push(new ActionRowBuilder().addComponents(buttons));
+    }
+    
+    // Create embed showing search results
+    const { EmbedBuilder } = require('discord.js');
+    const embed = new EmbedBuilder()
+      .setTitle(`🎵 Результаты поиска`)
+      .setColor(0x00FF00)
+      .setDescription(`По запросу: **${songQuery}**\n\nНайдено ${candidates.length} трек(а). **Выберите из меню:**`);
+    
+    const fields = candidates.slice(0, 10).map((c, i) => ({
+      name: `${i+1}️⃣ ${(c.title || c.url || '').slice(0, 60)}`,
+      value: 'Кликните чтобы выбрать',
+      inline: false
+    }));
+    embed.addFields(fields);
+    
+    // Update the message with search results and selection menu
+    await interaction.message.edit({ embeds: [embed], components }).catch(() => null);
+    
+    return;
   } catch (e) {
-    console.error('handleSearchModalSubmit error:', e.message);
-    await interaction.reply({ content: '❌ Ошибка при поиске', ephemeral: true }).catch(() => null);
+    console.error('handleSearchModalSubmit error:', e);
+    await interaction.deferUpdate().catch(() => null);
   }
 }
 
@@ -386,6 +439,136 @@ async function handleBack(interaction, client) {
   }
 }
 
+// Handle selection menu choice for search results
+async function handleSearchSelectMenu(interaction, client) {
+  try {
+    const customId = interaction.customId;
+    const searchId = customId.replace('player_search_select_', '');
+    const cache = global._playerSearchCache?.[searchId];
+    
+    if (!cache) {
+      return await interaction.deferUpdate().catch(() => null);
+    }
+    
+    const selectedIndex = parseInt(interaction.values[0]);
+    const selectedTrack = cache.candidates[selectedIndex];
+    
+    if (!selectedTrack) {
+      return await interaction.deferUpdate().catch(() => null);
+    }
+    
+    const trackUrl = selectedTrack.url || selectedTrack.link;
+    const trackTitle = selectedTrack.title || 'Unknown';
+    
+    // Get guild and voice channel
+    const guild = await client.guilds.fetch(cache.guildId).catch(() => null);
+    if (!guild) return await interaction.deferUpdate().catch(() => null);
+    
+    const voiceChannel = await guild.channels.fetch(cache.voiceChannelId).catch(() => null);
+    if (!voiceChannel) return await interaction.deferUpdate().catch(() => null);
+    
+    // Update the message to show now playing
+    const { EmbedBuilder, ActionRowBuilder } = require('discord.js');
+    const embed = new EmbedBuilder()
+      .setTitle('🎵 Viht player v.4214')
+      .setColor(0x00AA00)
+      .setDescription(`**Сейчас играет:**\n\`${trackTitle.slice(0, 100)}\`\n\n🎧 Плеер занят пользователем <@${cache.userId}>`)
+      .setFooter({ text: '🎵 Viht Audio System' })
+      .setTimestamp();
+    
+    const row = buildControlRow(true);
+    
+    await interaction.update({ embeds: [embed], components: [row] }).catch(() => null);
+    
+    // Update session
+    if (cache.session) {
+      cache.session.currentTrack = trackTitle;
+      cache.session.isPlaying = true;
+    }
+    
+    // Start playing
+    try {
+      await musicPlayer.playNow(guild, voiceChannel, trackUrl, guild.channels.cache.get(cache.session?.channelId) || null, cache.userId).catch(() => {});
+    } catch (e) {
+      console.warn('playNow error:', e.message);
+    }
+    
+    // Clean up cache
+    delete global._playerSearchCache[searchId];
+  } catch (e) {
+    console.error('handleSearchSelectMenu error:', e);
+    await interaction.deferUpdate().catch(() => null);
+  }
+}
+
+// Handle button choice for search results (fallback when menu fails)
+async function handleSearchButton(interaction, client) {
+  try {
+    const customId = interaction.customId;
+    const match = customId.match(/player_search_btn_(.+?)_(\d+)$/);
+    
+    if (!match) {
+      return await interaction.deferUpdate().catch(() => null);
+    }
+    
+    const searchId = match[1];
+    const selectedIndex = parseInt(match[2]);
+    const cache = global._playerSearchCache?.[searchId];
+    
+    if (!cache) {
+      return await interaction.deferUpdate().catch(() => null);
+    }
+    
+    const selectedTrack = cache.candidates[selectedIndex];
+    
+    if (!selectedTrack) {
+      return await interaction.deferUpdate().catch(() => null);
+    }
+    
+    const trackUrl = selectedTrack.url || selectedTrack.link;
+    const trackTitle = selectedTrack.title || 'Unknown';
+    
+    // Get guild and voice channel
+    const guild = await client.guilds.fetch(cache.guildId).catch(() => null);
+    if (!guild) return await interaction.deferUpdate().catch(() => null);
+    
+    const voiceChannel = await guild.channels.fetch(cache.voiceChannelId).catch(() => null);
+    if (!voiceChannel) return await interaction.deferUpdate().catch(() => null);
+    
+    // Update the message to show now playing
+    const { EmbedBuilder } = require('discord.js');
+    const embed = new EmbedBuilder()
+      .setTitle('🎵 Viht player v.4214')
+      .setColor(0x00AA00)
+      .setDescription(`**Сейчас играет:**\n\`${trackTitle.slice(0, 100)}\`\n\n🎧 Плеер занят пользователем <@${cache.userId}>`)
+      .setFooter({ text: '🎵 Viht Audio System' })
+      .setTimestamp();
+    
+    const row = buildControlRow(true);
+    
+    await interaction.update({ embeds: [embed], components: [row] }).catch(() => null);
+    
+    // Update session
+    if (cache.session) {
+      cache.session.currentTrack = trackTitle;
+      cache.session.isPlaying = true;
+    }
+    
+    // Start playing
+    try {
+      await musicPlayer.playNow(guild, voiceChannel, trackUrl, null, cache.userId).catch(() => {});
+    } catch (e) {
+      console.warn('playNow error:', e.message);
+    }
+    
+    // Clean up cache
+    delete global._playerSearchCache[searchId];
+  } catch (e) {
+    console.error('handleSearchButton error:', e);
+    await interaction.deferUpdate().catch(() => null);
+  }
+}
+
 // Main button handler dispatcher
 async function handlePlayerPanelButton(interaction, client) {
   const { customId } = interaction;
@@ -402,6 +585,8 @@ async function handlePlayerPanelButton(interaction, client) {
     } else if (customId === 'player_vk_music') {
       const vkHandler = require('../vk/vkMusicHandler');
       await vkHandler.askForVkId(interaction);
+    } else if (customId.startsWith('player_search_btn_')) {
+      await handleSearchButton(interaction, client);
     }
   } catch (e) {
     console.error('handlePlayerPanelButton error:', e.message);
@@ -423,6 +608,19 @@ async function handlePlayerPanelModal(interaction, client) {
   }
 }
 
+// Handle select menu for search results
+async function handlePlayerPanelSelectMenu(interaction, client) {
+  const { customId } = interaction;
+  
+  try {
+    if (customId.startsWith('player_search_select_')) {
+      await handleSearchSelectMenu(interaction, client);
+    }
+  } catch (e) {
+    console.error('handlePlayerPanelSelectMenu error:', e.message);
+  }
+}
+
 module.exports = {
   postPlayerMessage,
   buildOccupyEmbed,
@@ -431,6 +629,7 @@ module.exports = {
   buildControlRow,
   handlePlayerPanelButton,
   handlePlayerPanelModal,
+  handlePlayerPanelSelectMenu,
   playerSessions,
   CONTROL_PANEL_CHANNEL_ID
 };

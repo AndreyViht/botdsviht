@@ -243,7 +243,7 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
       // Post Manager buttons
-      if (interaction.customId && interaction.customId.startsWith('post_')) {
+      if (interaction.customId && (interaction.customId.startsWith('post_') || interaction.customId.startsWith('pm_'))) {
         try { await handlePostManagerButton(interaction); } catch (err) { console.error('Post manager button error', err); await safeReply(interaction, { content: 'Ошибка при управлении постом.', ephemeral: true }); }
         return;
       }
@@ -768,7 +768,7 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
       // Post Manager modals
-      if (interaction.customId && interaction.customId.startsWith('post_') && interaction.customId.includes('modal')) {
+      if (interaction.customId && (interaction.customId.startsWith('post_') || interaction.customId.startsWith('pm_'))) {
         try {
           console.log('[POST_MANAGER] Обработка модали:', interaction.customId);
           await handlePostManagerModal(interaction);

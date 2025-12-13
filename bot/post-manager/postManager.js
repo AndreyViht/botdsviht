@@ -80,7 +80,7 @@ async function handleChannelSelect(interaction) {
   try {
     const userId = interaction.user.id;
     const session = postSessions.get(userId);
-    if (!session) return await interaction.reply({ content: '❌ Сессия потеряна', ephemeral: true }).catch(() => null);
+    if (!session) return;
 
     session.channel = interaction.values[0];
 
@@ -88,10 +88,9 @@ async function handleChannelSelect(interaction) {
       new ButtonBuilder().setCustomId(`pm_title_btn_${userId}`).setLabel('📝 Вперёд').setStyle(ButtonStyle.Primary)
     );
 
-    await interaction.reply({ 
+    await interaction.update({ 
       content: `✅ Канал <#${session.channel}> выбран!\n\n👇 Нажми кнопку чтобы заполнить заголовок`, 
-      components: [button],
-      ephemeral: true 
+      components: [button]
     }).catch(() => null);
   } catch (e) { console.error('[PM] Channel:', e.message); }
 }

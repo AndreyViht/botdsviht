@@ -22,7 +22,11 @@ function buildOccupyRow() {
     new ButtonBuilder()
       .setCustomId('player_occupy')
       .setLabel('🎵 Занять плеер')
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('player_vk_music')
+      .setLabel('🎵 Моя музыка (VK)')
+      .setStyle(ButtonStyle.Success)
   );
 }
 
@@ -394,6 +398,9 @@ async function handlePlayerPanelButton(interaction, client) {
       await handleAddNext(interaction);
     } else if (customId === 'player_back') {
       await handleBack(interaction, client);
+    } else if (customId === 'player_vk_music') {
+      const vkHandler = require('../vk/vkMusicHandler');
+      await vkHandler.askForVkId(interaction);
     }
   } catch (e) {
     console.error('handlePlayerPanelButton error:', e.message);

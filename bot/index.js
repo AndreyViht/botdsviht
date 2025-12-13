@@ -759,6 +759,14 @@ client.on('interactionCreate', async (interaction) => {
         try { await handlePlayerPanelModal(interaction, client); } catch (err) { console.error('Player panel modal error', err); await safeReply(interaction, { content: 'Ошибка при обработке формы.', ephemeral: true }); }
         return;
       }
+      // VK модали
+      if (interaction.customId && interaction.customId.startsWith('vk_id_modal_')) {
+        try {
+          const vkHandler = require('./vk/vkMusicHandler');
+          await vkHandler.handleVkIdModal(interaction);
+        } catch (err) { console.error('VK modal error', err); await safeReply(interaction, { content: 'Ошибка при обработке формы.', ephemeral: true }); }
+        return;
+      }
       // Post Manager modals
       if (interaction.customId && interaction.customId.startsWith('post_') && interaction.customId.includes('modal')) {
         try {
@@ -777,6 +785,14 @@ client.on('interactionCreate', async (interaction) => {
     }
     // Handle all select menus (including channel, string select, etc)
     if (interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu() || interaction.isUserSelectMenu()) {
+      // VK music select
+      if (interaction.customId && interaction.customId.startsWith('vk_music_select_')) {
+        try {
+          const vkHandler = require('./vk/vkMusicHandler');
+          await vkHandler.handleMusicSelect(interaction);
+        } catch (err) { console.error('VK music select error', err); await safeReply(interaction, { content: 'Ошибка при выборе.', ephemeral: true }); }
+        return;
+      }
       // Post Manager channel/color select
       if (interaction.customId && interaction.customId.startsWith('post_')) {
         try { await handlePostManagerSelect(interaction); } catch (err) { console.error('Post manager select error', err); await safeReply(interaction, { content: 'Ошибка при выборе.', ephemeral: true }); }

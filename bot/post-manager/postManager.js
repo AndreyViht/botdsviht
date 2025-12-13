@@ -395,20 +395,31 @@ async function handleSkipImage(interaction) {
 
 // Build post preview embed
 function buildPostPreview(session) {
-  const description = session.content ? 
-    `${session.content}\n\n🌐 Наш Сайт - https://vihtai.pro/\n📱 Наш телеграмм - https://t.me/vihtikai` 
-    : '(Текст не установлен)\n\n🌐 Наш Сайт - https://vihtai.pro/\n📱 Наш телеграмм - https://t.me/vihtikai';
-
   const embed = new EmbedBuilder()
     .setColor(session.color)
     .setTitle(session.title || '(Заголовок не установлен)')
-    .setDescription(description);
+    .setDescription(session.content || '(Текст не установлен)');
 
   if (session.attachmentUrl) {
     embed.setImage(session.attachmentUrl);
   }
 
   return embed;
+}
+
+// Build link buttons row
+function buildLinkRow() {
+  return new ActionRowBuilder()
+    .addComponents(
+      new ButtonBuilder()
+        .setURL('https://vihtai.pro/')
+        .setLabel('🌐 Наш Сайт')
+        .setStyle(ButtonStyle.Link),
+      new ButtonBuilder()
+        .setURL('https://t.me/vihtikai')
+        .setLabel('📱 Наш телеграмм')
+        .setStyle(ButtonStyle.Link)
+    );
 }
 
 // Handle preview button
@@ -422,7 +433,8 @@ async function handlePostPreview(interaction) {
     }
 
     const preview = buildPostPreview(session);
-    await interaction.reply({ embeds: [preview], ephemeral: true }).catch(() => null);
+    const linkRow = buildLinkRow();
+    await interaction.reply({ embeds: [preview], components: [linkRow], ephemeral: true }).catch(() => null);
   } catch (e) {
     console.error('[POST_MANAGER] handlePostPreview error:', e.message);
   }
@@ -453,7 +465,8 @@ async function handlePostPublish(interaction) {
     }
 
     const embed = buildPostPreview(session);
-    const published = await targetCh.send({ embeds: [embed] }).catch(e => {
+    const linkRow = buildLinkRow();
+    const published = await targetCh.send({ embeds: [embed], components: [linkRow] }).catch(e => {
       console.error('[POST_MANAGER] Failed to publish:', e.message);
       return null;
     });

@@ -56,27 +56,44 @@ async function postPostManagerPanel(client) {
   try {
     const ch = await client.channels.fetch(PANEL_CHANNEL_ID).catch(() => null);
     if (!ch) {
-      console.warn('[POST_MANAGER] Channel not found:', PANEL_CHANNEL_ID);
+      console.warn('[POST_MANAGER] Канал не найден:', PANEL_CHANNEL_ID);
       return false;
     }
 
     const embed = buildPostManagerEmbed();
     const row = buildControlRow();
 
+    await db.ensureReady();
+    const existing = await db.get('postManagerPanel').catch(() => null);
+
+    if (existing && existing.messageId) {
+      // Попытаемся обновить существующее сообщение
+      try {
+        const msg = await ch.messages.fetch(existing.messageId).catch(() => null);
+        if (msg) {
+          await msg.edit({ embeds: [embed], components: [row] });
+          console.log('[POST_MANAGER] Панель обновлена:', msg.id);
+          return true;
+        }
+      } catch (err) {
+        console.warn('[POST_MANAGER] Не удалось обновить сообщение, создаю новое:', err.message);
+      }
+    }
+
+    // Если нет существующего сообщения, создаём новое
     const msg = await ch.send({ embeds: [embed], components: [row] }).catch(e => {
-      console.error('[POST_MANAGER] Failed to post panel:', e.message);
+      console.error('[POST_MANAGER] Не удалось создать панель:', e.message);
       return null;
     });
 
     if (msg) {
-      console.log('[POST_MANAGER] Panel posted:', msg.id);
-      await db.ensureReady();
+      console.log('[POST_MANAGER] Панель создана:', msg.id);
       await db.set('postManagerPanel', { channelId: ch.id, messageId: msg.id });
       return true;
     }
     return false;
   } catch (e) {
-    console.error('[POST_MANAGER] postPostManagerPanel error:', e.message);
+    console.error('[POST_MANAGER] Ошибка postPostManagerPanel:', e.message);
     return false;
   }
 }
@@ -171,28 +188,38 @@ async function handleTitleModal(interaction) {
     }
 
     session.title = interaction.fields.getTextInputValue('post_title');
-    console.log('[POST_MANAGER] Title set:', session.title);
+    console.log('[POST_MANAGER] Заголовок установлен:', session.title);
 
-    // Show content input modal
-    const modal = new ModalBuilder()
-      .setCustomId(`post_content_modal_${userId}`)
-      .setTitle('📄 Текст поста')
-      .addComponents(
-        new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('post_content')
-            .setLabel('Описание/Текст')
-            .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder('напиши содержание поста...')
-            .setMaxLength(4000)
-            .setRequired(true)
-        )
-      );
+    // Проверяем тип интеракции - если это ModalSubmitInteraction, используем reply
+    // так как showModal() не работает с ModalSubmitInteraction
+    if (interaction.isModalSubmit()) {
+      // Show content input modal через новую интеракцию
+      const modal = new ModalBuilder()
+        .setCustomId(`post_content_modal_${userId}`)
+        .setTitle('📄 Текст поста')
+        .addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('post_content')
+              .setLabel('Описание/Текст')
+              .setStyle(TextInputStyle.Paragraph)
+              .setPlaceholder('напиши содержание поста...')
+              .setMaxLength(4000)
+              .setRequired(true)
+          )
+        );
 
-    await interaction.showModal(modal);
+      await interaction.showModal(modal);
+    } else {
+      await interaction.reply({ content: '❌ Неподдерживаемый тип интеракции', ephemeral: true });
+    }
   } catch (e) {
-    console.error('[POST_MANAGER] handleTitleModal error:', e.message);
-    await interaction.reply({ content: '❌ Ошибка: ' + e.message, ephemeral: true }).catch(() => null);
+    console.error('[POST_MANAGER] Ошибка handleTitleModal:', e.message);
+    try {
+      await interaction.reply({ content: '❌ Ошибка: ' + e.message, ephemeral: true });
+    } catch (replyErr) {
+      console.error('[POST_MANAGER] Не удалось отправить ошибку:', replyErr.message);
+    }
   }
 }
 
@@ -206,8 +233,12 @@ async function handleContentModal(interaction) {
       return await interaction.reply({ content: '❌ Сессия потеряна', ephemeral: true }).catch(() => null);
     }
 
+    if (!interaction.isModalSubmit()) {
+      return await interaction.reply({ content: '❌ Неподдерживаемый тип интеракции', ephemeral: true });
+    }
+
     session.content = interaction.fields.getTextInputValue('post_content');
-    console.log('[POST_MANAGER] Content set:', session.content);
+    console.log('[POST_MANAGER] Содержание установлено:', session.content.substring(0, 50) + '...');
 
     // Show color and image options
     const colorSelect = new ActionRowBuilder()
@@ -244,8 +275,12 @@ async function handleContentModal(interaction) {
       ephemeral: true
     });
   } catch (e) {
-    console.error('[POST_MANAGER] handleContentModal error:', e.message);
-    await interaction.reply({ content: '❌ Ошибка: ' + e.message, ephemeral: true }).catch(() => null);
+    console.error('[POST_MANAGER] Ошибка handleContentModal:', e.message);
+    try {
+      await interaction.reply({ content: '❌ Ошибка: ' + e.message, ephemeral: true });
+    } catch (replyErr) {
+      console.error('[POST_MANAGER] Не удалось отправить ошибку:', replyErr.message);
+    }
   }
 }
 

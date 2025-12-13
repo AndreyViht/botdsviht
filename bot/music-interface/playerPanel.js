@@ -22,11 +22,12 @@ function buildOccupyRow() {
     new ButtonBuilder()
       .setCustomId('player_occupy')
       .setLabel('🎵 Занять плеер')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('player_vk_music')
-      .setLabel('🎵 Моя музыка (VK)')
-      .setStyle(ButtonStyle.Success)
+      .setStyle(ButtonStyle.Primary)
+    // VK music button disabled temporarily
+    // new ButtonBuilder()
+    //   .setCustomId('player_vk_music')
+    //   .setLabel('🎵 Моя музыка (VK)')
+    //   .setStyle(ButtonStyle.Success)
   );
 }
 

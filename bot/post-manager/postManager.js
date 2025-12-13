@@ -285,6 +285,7 @@ async function handleColorSelect(interaction) {
   try {
     const userId = interaction.user.id;
     const session = postSessions.get(userId);
+    const messageInput = messageInputSessions.get(userId);
 
     if (!session) {
       return await interaction.reply({ content: '❌ Сессия потеряна', ephemeral: true }).catch(() => null);
@@ -293,7 +294,12 @@ async function handleColorSelect(interaction) {
     const colorKey = interaction.values[0];
     session.color = COLOR_PRESETS[colorKey] || 0x5865F2;
 
-    await interaction.reply({ content: `✅ Цвет установлен на **${colorKey}**`, ephemeral: true }).catch(() => null);
+    // Set stage to waiting for image
+    if (messageInput) {
+      messageInput.stage = 'waiting_image';
+    }
+
+    await interaction.reply({ content: `✅ Цвет установлен на **${colorKey}**\n\n🖼️ Можешь отправить фото (опционально) или нажми **"Опубликовать"** чтобы создать пост`, ephemeral: true }).catch(() => null);
   } catch (e) {
     console.error('[POST_MANAGER] handleColorSelect error:', e.message);
   }
@@ -365,25 +371,19 @@ async function handleSkipImage(interaction) {
 
 // Build post preview embed
 function buildPostPreview(session) {
+  const description = session.content ? 
+    `${session.content}\n\n🌐 Наш Сайт - https://vihtai.pro/\n📱 Наш телеграмм - https://t.me/vihtikai` 
+    : '(Текст не установлен)\n\n🌐 Наш Сайт - https://vihtai.pro/\n📱 Наш телеграмм - https://t.me/vihtikai';
+
   const embed = new EmbedBuilder()
     .setColor(session.color)
     .setTitle(session.title || '(Заголовок не установлен)')
-    .setDescription(session.content || '(Текст не установлен)');
+    .setDescription(description);
 
   if (session.attachmentUrl) {
     embed.setImage(session.attachmentUrl);
   }
 
-  const now = new Date();
-  const timeStr = now.toLocaleString('ru-RU', { 
-    year: 'numeric', 
-    month: '2-digit', 
-    day: '2-digit', 
-    hour: '2-digit', 
-    minute: '2-digit',
-    second: '2-digit'
-  });
-  embed.setFooter({ text: `Опубликовал <@&${PUBLISHER_ROLE_ID}> • ${timeStr}` });
   return embed;
 }
 
@@ -576,11 +576,11 @@ async function handlePostMessageInput(message) {
       if (message.attachments.size > 0) {
         session.attachmentUrl = message.attachments.first().url;
       }
-      messageInput.stage = 'complete';
+      messageInput.stage = 'color';
       
       await message.react('✅');
       
-      // Now show color and image selection
+      // Now show color selection
       const colorSelect = new ActionRowBuilder()
         .addComponents(
           new StringSelectMenuBuilder()
@@ -597,17 +597,9 @@ async function handlePostMessageInput(message) {
             )
         );
 
-      const skipButton = new ActionRowBuilder()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId(`post_skip_image_${userId}`)
-            .setLabel('✅ Готово')
-            .setStyle(ButtonStyle.Success)
-        );
-
       const botReply = await message.reply({
         content: `✅ Содержание установлено!\n\n🎨 **Выбери цвет:**`,
-        components: [colorSelect, skipButton],
+        components: [colorSelect],
         allowedMentions: { repliedUser: false }
       }).catch(() => null);
 
@@ -617,6 +609,24 @@ async function handlePostMessageInput(message) {
         botReply?.delete().catch(() => null);
       }, 1000);
       
+      return;
+    }
+
+    // Third stage = waiting for photo (if user sends image after color selection)
+    if (messageInput.stage === 'waiting_image') {
+      if (message.attachments.size > 0) {
+        session.attachmentUrl = message.attachments.first().url;
+        await message.react('✅');
+        const botReply = await message.reply({
+          content: `✅ Фото добавлено к посту!`,
+          allowedMentions: { repliedUser: false }
+        }).catch(() => null);
+        
+        setTimeout(() => {
+          message.delete().catch(() => null);
+          botReply?.delete().catch(() => null);
+        }, 1000);
+      }
       return;
     }
   } catch (e) {

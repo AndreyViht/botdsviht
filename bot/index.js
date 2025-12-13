@@ -852,6 +852,24 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     if (!guild) return;
     const member = newState.member || oldState.member;
 
+    // Вход в голосовой канал
+    try {
+      if (!oldState.channel && newState.channel) {
+        const embed = new EmbedBuilder()
+          .setTitle('🔊 Вошел в голосовой')
+          .setColor(0x4CAF50)
+          .setDescription(`<@${member.id}> присоединился к каналу **${newState.channel.name}**`)
+          .addFields(
+            { name: 'Сервер', value: `${guild.name}`, inline: true },
+            { name: 'Канал', value: `${newState.channel.name}`, inline: true },
+            { name: 'Время', value: new Date().toLocaleString('ru-RU'), inline: true }
+          )
+          .setThumbnail(member.user.displayAvatarURL())
+          .setTimestamp();
+        await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
+      }
+    } catch (e) {}
+
     // Server mute/unmute
     try {
       if (oldState.serverMute !== newState.serverMute) {

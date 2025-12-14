@@ -2,55 +2,118 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 // Define all regular user commands with their descriptions
 const userCommands = [
-  { name: 'faq', emoji: '❓', ru: 'Список всех команд', en: 'List of all commands' },
   { name: 'profile', emoji: '👤', ru: 'Просмотр профиля и статистики', en: 'View profile and stats' },
-  { name: 'help', emoji: '🆘', ru: 'Справка по боту', en: 'Bot help' },
+  { name: 'balance', emoji: '💰', ru: 'Проверить баланс', en: 'Check balance' },
+  { name: 'daily', emoji: '📅', ru: 'Получить дневную награду', en: 'Get daily reward' },
+  { name: 'stats', emoji: '📊', ru: 'Статистика сервера', en: 'Server statistics' },
+  { name: 'leaderboard', emoji: '🏆', ru: 'Таблица лидеров', en: 'Leaderboard' },
+  { name: 'achievements', emoji: '🎖️', ru: 'Ваши достижения', en: 'Your achievements' },
+  { name: 'transfer', emoji: '💸', ru: 'Передать валюту другому', en: 'Transfer currency' },
   { name: 'info', emoji: 'ℹ️', ru: 'Информация о сервере', en: 'Server information' },
   { name: 'viht', emoji: '🔑', ru: 'О сервисе Viht', en: 'About Viht service' },
   { name: 'vpn', emoji: '🌐', ru: 'Информация о VPN', en: 'VPN information' },
   { name: 'vers', emoji: '📦', ru: 'Версия бота', en: 'Bot version' },
   { name: 'remind', emoji: '⏰', ru: 'Установить напоминание', en: 'Set reminder' },
   { name: 'music', emoji: '🎵', ru: 'Управление музыкой', en: 'Music control' },
-];
-
-// Define admin commands - these are shown in /admfaq
-const adminCommands = [
-  { name: 'ticket', emoji: '🎫', ru: 'Посмотреть статус обращения (только администраторы)', en: 'Check ticket status (admins only)' },
-  { name: 'register', emoji: '📝', ru: 'Регистрация ключей (только администраторы)', en: 'Register keys (admins only)' },
-  { name: 'role', emoji: '🎭', ru: 'Самоназначение ролей (только администраторы)', en: 'Self-assign roles (admins only)' },
-  { name: 'lang', emoji: '🌍', ru: 'Выбрать язык (RU/EN) (только администраторы)', en: 'Choose language (RU/EN) (admins only)' },
-  { name: 'onboarding', emoji: '📨', ru: 'Управление приветственными сообщениями (только администраторы)', en: 'Manage welcome messages (admins only)' },
-  { name: 'aiprivacy', emoji: '🔒', ru: 'Управление приватностью ИИ (только администраторы)', en: 'AI privacy settings (admins only)' },
-  { name: 'mstop', emoji: '⏹️', ru: 'Просмотр занятости музыкального плеера (только администраторы)', en: 'Check music player status (admins only)' },
-  { name: 'clearchat', emoji: '🗑️', ru: 'Очистить чат (удалить множество сообщений)', en: 'Clear chat (bulk delete messages)' },
-  { name: 'setvpn', emoji: '🌐', ru: 'Установить статус VPN', en: 'Set VPN status' },
-  { name: 'admfaq', emoji: '👑', ru: 'Список администраторских команд (этот список)', en: 'Admin commands list (this list)' },
+  { name: 'dice', emoji: '🎲', ru: 'Бросить кубик', en: 'Roll a dice' },
+  { name: 'flip', emoji: '🪙', ru: 'Подбросить монету', en: 'Flip a coin' },
+  { name: 'roulette', emoji: '🎰', ru: 'Русская рулетка', en: 'Russian roulette' },
+  { name: 'support', emoji: '🆘', ru: '⚠️ ТОЛЬКО ОСНОВАТЕЛЬ - Создать тикет', en: '⚠️ FOUNDER ONLY - Create ticket' },
+  { name: 'ticket', emoji: '🎫', ru: '⚠️ ТОЛЬКО ОСНОВАТЕЛЬ - Статус тикета', en: '⚠️ FOUNDER ONLY - Ticket status' },
 ];
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('faq')
-    .setDescription('📚 Список всего доступных команд и справка'),
+    .setDescription('📚 Список всех команд для пользователей'),
 
   async execute(interaction) {
     const lang = (interaction.client && interaction.client.userLangs && interaction.client.userLangs.get(interaction.user.id)) || 'ru';
     const isRu = lang === 'ru';
 
     const embed = new EmbedBuilder()
-      .setTitle(isRu ? '📋 Доступные команды' : '📋 Available commands')
-      .setColor(0x2b6cb0)
-      .setDescription(isRu ? 'Вот все команды, которые вы можете использовать' : 'Here are all commands you can use');
+      .setTitle(isRu ? '📚 КОМАНДЫ ПОЛЬЗОВАТЕЛЕЙ' : '📚 USER COMMANDS')
+      .setColor(0x3498db)
+      .setDescription(isRu ? 
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 Все доступные команды для вас\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' : 
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 All available commands for you\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+      );
+
+    // Group commands by category
+    const categories = {
+      profile: [],
+      economy: [],
+      games: [],
+      info: [],
+      media: [],
+      restricted: []
+    };
+
+    const categoryEmojis = {
+      profile: '👤',
+      economy: '💰',
+      games: '🎮',
+      info: 'ℹ️',
+      media: '🎵',
+      restricted: '⚠️'
+    };
+
+    // Categorize commands
+    const profileCmds = ['profile', 'stats', 'achievements'];
+    const economyCmds = ['balance', 'daily', 'leaderboard', 'transfer'];
+    const gameCmds = ['dice', 'flip', 'roulette'];
+    const infoCmds = ['info', 'viht', 'vpn', 'vers', 'remind'];
+    const mediaCmds = ['music'];
+    const restrictedCmds = ['support', 'ticket'];
 
     for (const cmd of userCommands) {
-      const description = isRu ? cmd.ru : cmd.en;
+      let cat = 'restricted';
+      if (profileCmds.includes(cmd.name)) cat = 'profile';
+      else if (economyCmds.includes(cmd.name)) cat = 'economy';
+      else if (gameCmds.includes(cmd.name)) cat = 'games';
+      else if (infoCmds.includes(cmd.name)) cat = 'info';
+      else if (mediaCmds.includes(cmd.name)) cat = 'media';
+      
+      categories[cat].push(cmd);
+    }
+
+    // Add category fields
+    for (const [cat, cmds] of Object.entries(categories)) {
+      if (cmds.length === 0) continue;
+      
+      const lines = cmds.map(cmd => 
+        `${cmd.emoji} \`/${cmd.name}\` — ${isRu ? cmd.ru : cmd.en}`
+      ).join('\n');
+      
+      const catName = isRu ? 
+        (cat === 'profile' ? '👤 Профиль' : 
+         cat === 'economy' ? '💰 Экономика' :
+         cat === 'games' ? '🎮 Игры' :
+         cat === 'info' ? 'ℹ️ Информация' :
+         cat === 'media' ? '🎵 Медиа' :
+         '⚠️ Ограниченные команды') :
+        (cat === 'profile' ? '👤 Profile' :
+         cat === 'economy' ? '💰 Economy' :
+         cat === 'games' ? '🎮 Games' :
+         cat === 'info' ? 'ℹ️ Information' :
+         cat === 'media' ? '🎵 Media' :
+         '⚠️ Restricted Commands');
+      
       embed.addFields({ 
-        name: `${cmd.emoji} /${cmd.name}`,
-        value: description,
+        name: catName,
+        value: lines,
         inline: false
       });
     }
 
-    embed.setFooter({ text: isRu ? 'Используйте /admfaq для администраторских команд' : 'Use /admfaq for admin commands' });
+    embed.addFields({
+      name: isRu ? '\n━━━━━━━━━━━━━━━━━━━━━━━━━━' : '\n━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      value: isRu ? 
+        '💡 Для администраторских команд используй `/afaq`\n' +
+        '❓ Напиши `/help` для справки по боту' :
+        '💡 Use `/afaq` for admin commands\n' +
+        '❓ Type `/help` for bot help'
+    });
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
   }

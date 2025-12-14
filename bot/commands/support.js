@@ -4,14 +4,7 @@ const db = require('../libs/db');
 // Config: channel and allowed roles
 const SUPPORT_CHANNEL_ID = '1442575929044897792';
 const CATEGORY_ID = '1442575852993777866';
-const ALLOWED_CREATOR_ROLES = [
-  '1441744621641400353',
-  '1441745037531549777',
-  '1436486915221098588',
-  '1436486486156382299',
-  '1436486253066326067',
-  '1436485697392607303'
-];
+const FOUNDER_ROLE_ID = '1436485697392607303'; // Only founder can use /support
 const config = require('../config');
 const STAFF_ROLES = (config.adminRoles && config.adminRoles.length > 0) ? config.adminRoles : [ '1436485697392607303', '1436486253066326067' ];
 
@@ -30,10 +23,15 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     try {
       if (sub === 'create') {
-        // check creator roles
+        // check creator roles - ONLY FOUNDER
         const member = interaction.member;
-        const has = member && member.roles && member.roles.cache && ALLOWED_CREATOR_ROLES.some(r => member.roles.cache.has(r));
-        if (!has) return interaction.reply({ content: 'У вас нет роли, которая позволяет создавать обращение.', ephemeral: true });
+        const hasRole = member && member.roles && member.roles.cache && member.roles.cache.has(FOUNDER_ROLE_ID);
+        if (!hasRole) {
+          return interaction.reply({ 
+            content: '⛔ **Доступ закрыт**\n👑 Эту команду может использовать только Основатель (Founder) сервера.\n\n`/support` — команда для создания тикетов поддержки через Discord.',
+            ephemeral: true 
+          });
+        }
 
         const subject = interaction.options.getString('subject').slice(0, 60);
         const message = interaction.options.getString('message').slice(0, 2000);

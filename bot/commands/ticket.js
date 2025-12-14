@@ -1,19 +1,24 @@
 const { SlashCommandBuilder } = require('discord.js');
 const db = require('../libs/db');
 
+const FOUNDER_ROLE_ID = '1436485697392607303'; // Only founder can use /ticket
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ticket')
-    .setDescription('🎫 Просмотр статуса обращения и тикетов (только администраторы)')
+    .setDescription('🎫 Просмотр статуса тикетов (только Основатель)')
     .addSubcommand(s => s.setName('status').setDescription('Показать статус тикета').addStringOption(o => o.setName('id').setDescription('ID тикета').setRequired(false))),
 
   async execute(interaction) {
-    // Only admins can use this command
-    const config = require('../config');
-    const member = interaction.member || (interaction.guild ? await interaction.guild.members.fetch(interaction.user.id).catch(() => null) : null);
-    const isAdmin = member && member.roles && member.roles.cache && config.adminRoles && config.adminRoles.some(rid => member.roles.cache.has(rid));
-    if (!isAdmin) {
-      return await interaction.reply({ content: 'У вас нет доступа к этой команде. Требуется административная роль.', ephemeral: true });
+    // Only founder can use this command
+    const member = interaction.member;
+    const hasRole = member && member.roles && member.roles.cache && member.roles.cache.has(FOUNDER_ROLE_ID);
+    
+    if (!hasRole) {
+      return await interaction.reply({ 
+        content: '⛔ **Доступ закрыт**\n👑 Эту команду может использовать только Основатель (Founder) сервера.',
+        ephemeral: true 
+      });
     }
 
     const sub = interaction.options.getSubcommand();

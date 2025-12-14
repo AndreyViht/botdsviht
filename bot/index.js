@@ -1416,8 +1416,12 @@ client.once('ready', async () => {
     if (reviewsCommand.connectToVoiceChannel) {
       await reviewsCommand.connectToVoiceChannel(client);
     }
+    // Ensure reviews panel exists
+    if (reviewsCommand.ensureReviewsPanel) {
+      await reviewsCommand.ensureReviewsPanel(client);
+    }
   } catch (e) {
-    console.warn('Reviews voice channel connection failed:', e.message);
+    console.warn('Reviews initialization failed:', e.message);
   }
   
   // Отправляем уведомление о готовности бота в канал логов

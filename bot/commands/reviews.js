@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const db = require('../libs/db');
 
-const REVIEWS_CHANNEL_ID = ''; // Укажи канал отзывов
+const REVIEWS_CHANNEL_ID = '1449758856682017001'; // Канал с панелью отзывов
 const ADMIN_REVIEW_CHANNEL_ID = '1446801265219604530'; // Канал для проверки
 const VOICE_CHANNEL_ID = '1449757724274589829'; // Голосовой канал
 const ALLOWED_ROLE_ID = '1436485697392607303';
@@ -330,5 +330,70 @@ module.exports.connectToVoiceChannel = async (client) => {
     }
   } catch (error) {
     console.error('[Reviews] Error connecting to voice channel:', error);
+  }
+};
+
+// Функция для создания/обновления панели отзывов
+module.exports.ensureReviewsPanel = async (client) => {
+  try {
+    await db.ensureReady();
+    
+    const channel = await client.channels.fetch(REVIEWS_CHANNEL_ID).catch(() => null);
+    if (!channel || !channel.isTextBased()) {
+      console.warn('[Reviews] Reviews channel not found');
+      return;
+    }
+
+    // Проверяем есть ли уже панель в БД
+    let reviewsPanelId = db.get('reviews_panel_id');
+
+    // Если панель записана в БД, пытаемся получить её
+    if (reviewsPanelId) {
+      try {
+        const existingMessage = await channel.messages.fetch(reviewsPanelId).catch(() => null);
+        if (existingMessage) {
+          console.log('[Reviews] Reviews panel already exists, skipping creation');
+          return;
+        }
+      } catch (e) {
+        console.warn('[Reviews] Existing panel message not found, creating new one');
+      }
+    }
+
+    // Создаём новую панель
+    const embed = new EmbedBuilder()
+      .setTitle('📝 Отзывы о Viht VPN')
+      .setDescription('Поделись своим мнением о нашем сервисе!')
+      .setColor(0xFF006E)
+      .addFields(
+        { name: '💬 Оставить отзыв', value: 'Нажми кнопку ниже, чтобы поделиться своим мнением', inline: false },
+        { name: '⭐ Просмотреть отзывы', value: 'Смотри что думают другие пользователи', inline: false }
+      );
+
+    const leaveReviewBtn = new ButtonBuilder()
+      .setCustomId('review_leave')
+      .setLabel('Оставить отзыв')
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji('📝');
+
+    const viewReviewsBtn = new ButtonBuilder()
+      .setCustomId('review_view')
+      .setLabel('Смотреть отзывы')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji('⭐');
+
+    const row = new ActionRowBuilder().addComponents(leaveReviewBtn, viewReviewsBtn);
+
+    const message = await channel.send({
+      embeds: [embed],
+      components: [row]
+    });
+
+    // Сохраняем ID панели в БД
+    await db.set('reviews_panel_id', message.id);
+    console.log('[Reviews] Reviews panel created and saved:', message.id);
+
+  } catch (error) {
+    console.error('[Reviews] Error ensuring reviews panel:', error);
   }
 };

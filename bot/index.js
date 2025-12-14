@@ -466,9 +466,49 @@ client.on('interactionCreate', async (interaction) => {
         }
         return;
       }
+      // Settings and moderation buttons
+      if (interaction.customId && (interaction.customId.startsWith('settings_') || interaction.customId.startsWith('mod_'))) {
+        try {
+          if (interaction.customId.startsWith('settings_')) {
+            const settingsCmd = client.commands.get('settings');
+            if (settingsCmd && settingsCmd.handleButton) {
+              await settingsCmd.handleButton(interaction);
+            }
+          } else if (interaction.customId.startsWith('mod_')) {
+            const modCmd = client.commands.get('moderation');
+            if (modCmd && modCmd.handleButton) {
+              await modCmd.handleButton(interaction);
+            }
+          }
+        } catch (err) {
+          console.error('Settings/moderation button error', err);
+          await safeReply(interaction, { content: '❌ Ошибка при обработке команды.', ephemeral: true });
+        }
+        return;
+      }
       return;
     }
     if (interaction.isStringSelectMenu && interaction.isStringSelectMenu()) {
+      // Settings and moderation select menus
+      if (interaction.customId && (interaction.customId.startsWith('settings_') || interaction.customId.startsWith('mod_'))) {
+        try {
+          if (interaction.customId.startsWith('settings_')) {
+            const settingsCmd = client.commands.get('settings');
+            if (settingsCmd && settingsCmd.handleSelect) {
+              await settingsCmd.handleSelect(interaction);
+            }
+          } else if (interaction.customId.startsWith('mod_')) {
+            const modCmd = client.commands.get('moderation');
+            if (modCmd && modCmd.handleSelect) {
+              await modCmd.handleSelect(interaction);
+            }
+          }
+        } catch (err) {
+          console.error('Settings/moderation select error', err);
+          await safeReply(interaction, { content: '❌ Ошибка при обработке команды.', ephemeral: true });
+        }
+        return;
+      }
       // Handle AI chat select menu (choose chat from list, then show action buttons)
       if (interaction.customId && interaction.customId.startsWith('ai_chat_select_')) {
         try {
@@ -577,6 +617,26 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
     if (interaction.isModalSubmit()) {
+      // Settings and moderation modals
+      if (interaction.customId && (interaction.customId.startsWith('settings_') || interaction.customId.startsWith('mod_'))) {
+        try {
+          if (interaction.customId.startsWith('settings_')) {
+            const settingsCmd = client.commands.get('settings');
+            if (settingsCmd && settingsCmd.handleModal) {
+              await settingsCmd.handleModal(interaction);
+            }
+          } else if (interaction.customId.startsWith('mod_')) {
+            const modCmd = client.commands.get('moderation');
+            if (modCmd && modCmd.handleModal) {
+              await modCmd.handleModal(interaction);
+            }
+          }
+        } catch (err) {
+          console.error('Settings/moderation modal error', err);
+          await safeReply(interaction, { content: '❌ Ошибка: ' + (err.message || err), ephemeral: true });
+        }
+        return;
+      }
       // Handle support creation modal submission
       if (interaction.customId === 'support_modal') {
         try {

@@ -1291,6 +1291,16 @@ client.once('ready', async () => {
   await db.ensureReady();
   console.log('✅ DB ready, proceeding with startup status report');
   
+  // Initialize stats tracker
+  try {
+    const statsTracker = require('./libs/statsTracker');
+    statsTracker.initStats();
+    statsTracker.cleanupOldStats();
+    console.log('✅ Stats tracker initialized and cleaned up');
+  } catch (e) {
+    console.warn('Stats tracker init failed:', e.message);
+  }
+  
   // Отправляем уведомление о готовности бота в канал логов
   try {
     const VOICE_LOG_CHANNEL = '1446801072344662149';

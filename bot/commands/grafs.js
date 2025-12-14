@@ -102,17 +102,26 @@ async function generateChart(data, title, type = 'recent') {
 
 // Создание красивого embed'а со статистикой
 function createStatsEmbed(data, title, emoji) {
-  const dates = Object.keys(data).reverse();
+  const dates = Object.keys(data).sort();
+  
+  if (dates.length === 0) {
+    return new EmbedBuilder()
+      .setTitle(`${emoji} ${title}`)
+      .setColor(0xFF0000)
+      .setDescription('❌ Нет данных для отображения')
+      .setFooter({ text: '📈 Статистика сервера • ' + new Date().toLocaleString('ru-RU') })
+      .setTimestamp();
+  }
   
   // Вычисляем статистику
   const totalJoins = dates.reduce((sum, d) => sum + (data[d]?.joins || 0), 0);
   const totalBoosts = dates.reduce((sum, d) => sum + (data[d]?.boosts || 0), 0);
-  const avgJoins = Math.round(totalJoins / dates.length);
+  const avgJoins = dates.length > 0 ? Math.round(totalJoins / dates.length) : 0;
   
   // Найти макс и мин
   const joinsArray = dates.map(d => data[d]?.joins || 0);
-  const maxJoins = Math.max(...joinsArray);
-  const minJoins = Math.min(...joinsArray);
+  const maxJoins = joinsArray.length > 0 ? Math.max(...joinsArray) : 0;
+  const minJoins = joinsArray.length > 0 && joinsArray.some(j => j > 0) ? Math.min(...joinsArray.filter(j => j > 0)) : 0;
   
   // Роли
   const allRoles = {};
@@ -149,7 +158,7 @@ function createStatsEmbed(data, title, emoji) {
       },
       {
         name: '⬇️ Минимум в день',
-        value: `\`${minJoins}\``,
+        value: `\`${minJoins > 0 ? minJoins : 'N/A'}\``,
         inline: true
       },
       {

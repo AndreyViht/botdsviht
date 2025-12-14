@@ -33,6 +33,8 @@ function trackUserJoin(userId, guildId) {
     const stats = db.get(STATS_KEY) || {};
     const dateKey = getDateKey();
     
+    console.log('[StatsTracker] trackUserJoin - userId:', userId, 'guildId:', guildId, 'date:', dateKey);
+    
     if (!stats[dateKey]) {
       stats[dateKey] = {
         joins: 0,
@@ -47,9 +49,11 @@ function trackUserJoin(userId, guildId) {
     if (!stats[dateKey].users.includes(userId)) {
       stats[dateKey].users.push(userId);
       stats[dateKey].joins = (stats[dateKey].joins || 0) + 1;
+      console.log('[StatsTracker] Added user join - total today:', stats[dateKey].joins);
     }
     
     db.set(STATS_KEY, stats);
+    console.log('[StatsTracker] Stats saved to DB');
   } catch (e) {
     console.error('[StatsTracker] trackUserJoin error:', e.message);
   }
@@ -115,16 +119,21 @@ function getStatsForDays(days = 7) {
     const stats = db.get(STATS_KEY) || {};
     const result = {};
     
-    for (let i = 0; i < days; i++) {
+    for (let i = days - 1; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dateKey = getDateKey(date);
       
-      if (stats[dateKey]) {
-        result[dateKey] = stats[dateKey];
-      }
+      // Добавляем даже если нет данных, чтобы график был плавным
+      result[dateKey] = stats[dateKey] || {
+        joins: 0,
+        boosts: 0,
+        roles: {},
+        users: []
+      };
     }
     
+    console.log('[StatsTracker] getStatsForDays returning:', Object.keys(result).length, 'days');
     return result;
   } catch (e) {
     console.error('[StatsTracker] getStatsForDays error:', e.message);
@@ -141,16 +150,21 @@ function getAllStats() {
     const stats = db.get(STATS_KEY) || {};
     const result = {};
     
-    for (let i = 0; i < DAYS_TO_KEEP; i++) {
+    for (let i = DAYS_TO_KEEP - 1; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dateKey = getDateKey(date);
       
-      if (stats[dateKey]) {
-        result[dateKey] = stats[dateKey];
-      }
+      // Добавляем даже если нет данных
+      result[dateKey] = stats[dateKey] || {
+        joins: 0,
+        boosts: 0,
+        roles: {},
+        users: []
+      };
     }
     
+    console.log('[StatsTracker] getAllStats returning:', Object.keys(result).length, 'days');
     return result;
   } catch (e) {
     console.error('[StatsTracker] getAllStats error:', e.message);

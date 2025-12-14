@@ -71,69 +71,79 @@ module.exports = {
 module.exports.handleButton = async (interaction) => {
   if (!interaction.customId.startsWith('review_')) return;
 
-  if (interaction.customId === 'review_leave') {
-    const modal = new ModalBuilder()
-      .setCustomId('review_submit_modal')
-      .setTitle('Оставить отзыв');
+  try {
+    if (interaction.customId === 'review_leave') {
+      const modal = new ModalBuilder()
+        .setCustomId('review_submit_modal')
+        .setTitle('Оставить отзыв');
 
-    const reviewInput = new TextInputBuilder()
-      .setCustomId('review_text')
-      .setLabel('Твой отзыв')
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Напиши своё мнение о Viht VPN...')
-      .setMinLength(10)
-      .setMaxLength(2000)
-      .setRequired(true);
+      const reviewInput = new TextInputBuilder()
+        .setCustomId('review_text')
+        .setLabel('Твой отзыв')
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('Напиши своё мнение о Viht VPN...')
+        .setMinLength(10)
+        .setMaxLength(2000)
+        .setRequired(true);
 
-    const ratingInput = new TextInputBuilder()
-      .setCustomId('review_rating')
-      .setLabel('Оценка (1-5 звёзд)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('От 1 до 5')
-      .setMinLength(1)
-      .setMaxLength(1)
-      .setRequired(true);
+      const ratingInput = new TextInputBuilder()
+        .setCustomId('review_rating')
+        .setLabel('Оценка (1-5 звёзд)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('От 1 до 5')
+        .setMinLength(1)
+        .setMaxLength(1)
+        .setRequired(true);
 
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(reviewInput),
-      new ActionRowBuilder().addComponents(ratingInput)
-    );
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(reviewInput),
+        new ActionRowBuilder().addComponents(ratingInput)
+      );
 
-    await interaction.showModal(modal);
-  }
+      await interaction.showModal(modal);
+      return;
+    }
 
-  if (interaction.customId === 'review_view') {
-    await db.ensureReady();
-    const allReviews = db.get('reviews') || { approved: [] };
-    const approved = allReviews.approved || [];
+    if (interaction.customId === 'review_view') {
+      await db.ensureReady();
+      const allReviews = db.get('reviews') || { approved: [] };
+      const approved = allReviews.approved || [];
 
-    if (approved.length === 0) {
-      return await interaction.reply({
-        content: '❌ Одобренных отзывов ещё нет',
+      if (approved.length === 0) {
+        return await interaction.reply({
+          content: '❌ Одобренных отзывов ещё нет',
+          ephemeral: true
+        });
+      }
+
+      const embeds = [];
+      for (let i = 0; i < Math.min(approved.length, 5); i++) {
+        const review = approved[i];
+        const user = await interaction.client.users.fetch(review.userId).catch(() => null);
+        const stars = '⭐'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
+
+        const embed = new EmbedBuilder()
+          .setColor(0xFF006E)
+          .setAuthor({ name: user ? user.username : 'Unknown User', iconURL: user?.displayAvatarURL() })
+          .setDescription(review.text)
+          .addFields({ name: 'Оценка', value: stars, inline: false })
+          .setFooter({ text: `${i + 1}/${approved.length}` });
+
+        embeds.push(embed);
+      }
+
+      await interaction.reply({
+        embeds: [embeds[0]],
         ephemeral: true
       });
+      return;
     }
-
-    const embeds = [];
-    for (let i = 0; i < Math.min(approved.length, 5); i++) {
-      const review = approved[i];
-      const user = await interaction.client.users.fetch(review.userId).catch(() => null);
-      const stars = '⭐'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
-
-      const embed = new EmbedBuilder()
-        .setColor(0xFF006E)
-        .setAuthor({ name: user ? user.username : 'Unknown User', iconURL: user?.displayAvatarURL() })
-        .setDescription(review.text)
-        .addFields({ name: 'Оценка', value: stars, inline: false })
-        .setFooter({ text: `${i + 1}/${approved.length}` });
-
-      embeds.push(embed);
-    }
-
+  } catch (error) {
+    console.error('Review button error:', error);
     await interaction.reply({
-      embeds: [embeds[0]],
+      content: `❌ Ошибка: ${error.message}`,
       ephemeral: true
-    });
+    }).catch(() => {});
   }
 };
 

@@ -424,8 +424,17 @@ async function checkMessage(message, client) {
     console.log(`[BADWORD-CHECK] Проверка сообщения: "${content.slice(0, 50)}"`);
     const foundBadwords = [];
     
+    // Удаляем @mentions и #hashtags перед проверкой (это может содержать символы, которые ошибочно срабатывают)
+    const contentWithoutMentions = content
+      .replace(/<@!?\d+>/g, '') // Discord mentions типа <@123456789>
+      .replace(/@\S+/g, '')     // Обычные mentions типа @username
+      .replace(/#\S+/g, '')     // Hashtags типа #channel
+      .trim();
+    
+    if (contentWithoutMentions.length === 0) return; // Если только mentions/hashtags - выход
+    
     // Нормализируем весь текст сообщения сразу
-    const normalizedContent = cleanText(content);
+    const normalizedContent = cleanText(contentWithoutMentions);
     const transliteratedContent = englishToRussian(normalizedContent);
     const contentWords = normalizedContent.split(/\s+/).filter(w => w.length > 0);
     const transliteratedWords = transliteratedContent.split(/\s+/).filter(w => w.length > 0);
@@ -453,16 +462,20 @@ async function checkMessage(message, client) {
         }
         
         // 2. Слово содержит матерное слово (для слов без пробелов)
-        if (word.includes(cleanedBadword) || transliteratedWord.includes(cleanedBadword)) {
-          if (!foundBadwords.includes(badword)) {
-            foundBadwords.push(badword);
-            console.log(`[BADWORD] ✓ CONTAINS: "${badword}" in word "${word}"`);
+        // НО: для очень коротких badwords (< 3 букв), требуем только exact match, чтобы избежать false positives
+        if (cleanedBadword.length >= 3) {
+          if (word.includes(cleanedBadword) || transliteratedWord.includes(cleanedBadword)) {
+            if (!foundBadwords.includes(badword)) {
+              foundBadwords.push(badword);
+              console.log(`[BADWORD] ✓ CONTAINS: "${badword}" in word "${word}"`);
+            }
+            break;
           }
-          break;
         }
         
         // 3. Матерное слово содержит слово (для частичных совпадений)
-        if ((cleanedBadword.includes(word) || cleanedBadword.includes(transliteratedWord)) && word.length >= 3) {
+        // НО: только если badword длинный И слово достаточно длинное (минимум 3 буквы)
+        if ((cleanedBadword.includes(word) || cleanedBadword.includes(transliteratedWord)) && word.length >= 4 && cleanedBadword.length >= 5) {
           if (!foundBadwords.includes(badword)) {
             foundBadwords.push(badword);
             console.log(`[BADWORD] ✓ PARTIAL: word "${word}" is part of badword "${badword}"`);
@@ -473,9 +486,12 @@ async function checkMessage(message, client) {
       
       // Также проверяем в целом тексте без разделения на слова
       // Это нужно для текстов без пробелов типа "Вотэтонихуясебе"
-      if ((normalizedContent.includes(cleanedBadword) || transliteratedContent.includes(cleanedBadword)) && !foundBadwords.includes(badword)) {
-        foundBadwords.push(badword);
-        console.log(`[BADWORD] ✓ IN TEXT: "${badword}" found in normalized content`);
+      // НО: для коротких badwords требуем их длину >= 3, чтобы избежать false positives
+      if (cleanedBadword.length >= 3) {
+        if ((normalizedContent.includes(cleanedBadword) || transliteratedContent.includes(cleanedBadword)) && !foundBadwords.includes(badword)) {
+          foundBadwords.push(badword);
+          console.log(`[BADWORD] ✓ IN TEXT: "${badword}" found in normalized content`);
+        }
       }
     }
 

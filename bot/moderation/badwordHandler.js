@@ -141,6 +141,16 @@ async function handleBadwordMute(message, foundBadwords, client) {
 
   const userId = message.author.id;
 
+  // Проверяем иерархию ролей - не мутим людей выше по иерархии
+  const botMember = await guild.members.fetch(client.user.id).catch(() => null);
+  if (!botMember) return;
+
+  // Если роль пользователя выше или равна роли бота - не мутим
+  if (member.roles.highest.position >= botMember.roles.highest.position) {
+    console.log(`[Badword] Skipping mute for ${member.user.tag} - higher or equal role hierarchy`);
+    return;
+  }
+
   // Track badword-specific violations separately from manual warnings
   // Используем отдельный ключ в БД: 'badwordViolations'
   const badwordViolations = db.get('badwordViolations') || {};

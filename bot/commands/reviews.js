@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
+const { joinVoiceChannel } = require('@discordjs/voice');
 const db = require('../libs/db');
 
 const REVIEWS_CHANNEL_ID = '1449758856682017001'; // Канал с панелью отзывов
@@ -325,18 +326,23 @@ module.exports.handleReviewButton = async (interaction) => {
 module.exports.connectToVoiceChannel = async (client) => {
   try {
     const voiceChannel = await client.channels.fetch(VOICE_CHANNEL_ID).catch(() => null);
-    if (!voiceChannel || !voiceChannel.isVoiceBased()) {
+    if (!voiceChannel || voiceChannel.type !== ChannelType.GuildVoice) {
       console.warn('[Reviews] Voice channel not found or not voice channel');
       return;
     }
 
-    const connection = await voiceChannel.join().catch(err => {
-      console.warn('[Reviews] Could not join voice channel:', err.message);
-      return null;
-    });
+    try {
+      const connection = joinVoiceChannel({
+        channelId: VOICE_CHANNEL_ID,
+        guildId: voiceChannel.guildId,
+        adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+        selfDeaf: true,
+        selfMute: true
+      });
 
-    if (connection) {
       console.log('[Reviews] Bot connected to voice channel for reviews system');
+    } catch (err) {
+      console.warn('[Reviews] Could not join voice channel:', err.message);
     }
   } catch (error) {
     console.error('[Reviews] Error connecting to voice channel:', error);

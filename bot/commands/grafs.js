@@ -1,103 +1,54 @@
-const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 const statsTracker = require('../libs/statsTracker');
-const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
-const fs = require('fs');
-const path = require('path');
 
 const ALLOWED_ROLE = '1436485697392607303';
 
-// Генерация красивого графика
-async function generateChart(data, title, type = 'recent') {
-  try {
-    const dates = Object.keys(data).reverse().slice(-14); // Последние 14 дней
-    const joins = dates.map(d => data[d]?.joins || 0);
-    const boosts = dates.map(d => data[d]?.boosts || 0);
-    
-    const width = 1200;
-    const height = 600;
-    const chartJSNodeCanvas = new ChartJSNodeCanvas({ width, height });
-    
-    const image = await chartJSNodeCanvas.drawChart({
-      type: 'line',
-      data: {
-        labels: dates.map(d => d.split('-')[2]), // Только день месяца
-        datasets: [
-          {
-            label: '👥 Входы',
-            data: joins,
-            borderColor: '#00ff00',
-            backgroundColor: 'rgba(0, 255, 0, 0.1)',
-            borderWidth: 3,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 5,
-            pointBackgroundColor: '#00ff00',
-            pointBorderColor: '#ffffff',
-            pointBorderWidth: 2
-          },
-          {
-            label: '⭐ Бусты',
-            data: boosts,
-            borderColor: '#ffd700',
-            backgroundColor: 'rgba(255, 215, 0, 0.1)',
-            borderWidth: 3,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 5,
-            pointBackgroundColor: '#ffd700',
-            pointBorderColor: '#ffffff',
-            pointBorderWidth: 2
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            labels: {
-              font: { size: 14, weight: 'bold' },
-              color: '#ffffff',
-              padding: 15
-            }
-          },
-          title: {
-            display: true,
-            text: title,
-            font: { size: 20, weight: 'bold' },
-            color: '#ffffff',
-            padding: 20
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              color: '#ffffff',
-              font: { size: 12 }
-            },
-            grid: {
-              color: 'rgba(255, 255, 255, 0.1)'
-            }
-          },
-          x: {
-            ticks: {
-              color: '#ffffff',
-              font: { size: 12 }
-            },
-            grid: {
-              color: 'rgba(255, 255, 255, 0.1)'
-            }
-          }
-        }
-      }
-    });
-    
-    return image;
-  } catch (e) {
-    console.error('[grafs] Chart generation error:', e.message);
-    return null;
+// Простая текстовая визуализация графика (ASCII art)
+function createAsciiChart(data, title) {
+  const dates = Object.keys(data).sort();
+  
+  if (dates.length === 0) {
+    return `Нет данных`;
   }
+  
+  const joins = dates.map(d => data[d]?.joins || 0);
+  const maxValue = Math.max(...joins, 1);
+  
+  let chart = `\`\`\`\n${title}\n`;
+  chart += `\n`;
+  
+  // Шкала по вертикали
+  for (let i = maxValue; i >= 0; i--) {
+    const lineNum = String(i).padStart(3);
+    chart += `${lineNum} │ `;
+    
+    for (let j = 0; j < joins.length; j++) {
+      const value = joins[j];
+      if (value >= i) {
+        chart += `█ `;
+      } else {
+        chart += `  `;
+      }
+    }
+    chart += `\n`;
+  }
+  
+  // Линия снизу
+  chart += `    └`;
+  for (let j = 0; j < joins.length; j++) {
+    chart += `──`;
+  }
+  chart += `\n`;
+  
+  // Дни снизу
+  chart += `     `;
+  for (let j = 0; j < dates.length; j++) {
+    const day = dates[j].split('-')[2];
+    chart += ` ${day}`;
+  }
+  chart += `\n\`\`\``;
+  
+  return chart;
 }
 
 // Создание красивого embed'а со статистикой
@@ -119,9 +70,9 @@ function createStatsEmbed(data, title, emoji) {
   const avgJoins = dates.length > 0 ? Math.round(totalJoins / dates.length) : 0;
   
   // Найти макс и мин
-  const joinsArray = dates.map(d => data[d]?.joins || 0);
+  const joinsArray = dates.map(d => data[d]?.joins || 0).filter(j => j > 0);
   const maxJoins = joinsArray.length > 0 ? Math.max(...joinsArray) : 0;
-  const minJoins = joinsArray.length > 0 && joinsArray.some(j => j > 0) ? Math.min(...joinsArray.filter(j => j > 0)) : 0;
+  const minJoins = joinsArray.length > 0 ? Math.min(...joinsArray) : 0;
   
   // Роли
   const allRoles = {};
@@ -135,6 +86,7 @@ function createStatsEmbed(data, title, emoji) {
   const embed = new EmbedBuilder()
     .setTitle(`${emoji} ${title}`)
     .setColor(0x00ff00)
+    .setDescription(`📊 Статистика за ${dates.length} день(ей)`)
     .addFields(
       {
         name: '👥 Всего входов',
@@ -158,7 +110,7 @@ function createStatsEmbed(data, title, emoji) {
       },
       {
         name: '⬇️ Минимум в день',
-        value: `\`${minJoins > 0 ? minJoins : 'N/A'}\``,
+        value: `\`${minJoins > 0 ? minJoins : '0'}\``,
         inline: true
       },
       {
@@ -168,13 +120,29 @@ function createStatsEmbed(data, title, emoji) {
       }
     );
   
+  // Добавить ASCII график
+  const asciiChart = createAsciiChart(data, 'График входов 👥');
+  embed.addFields({
+    name: '📈 График входов',
+    value: asciiChart,
+    inline: false
+  });
+  
   // Добавить роли если есть
   if (Object.keys(allRoles).length > 0) {
     const rolesText = Object.entries(allRoles)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
       .map(([role, count]) => `• **${role}**: ${count}`)
       .join('\n');
     
-    embed.addField('👑 Распределение ролей', rolesText, false);
+    if (rolesText) {
+      embed.addFields({
+        name: '👑 ТОП роли',
+        value: rolesText,
+        inline: false
+      });
+    }
   }
   
   embed.setFooter({ text: '📈 Статистика сервера • ' + new Date().toLocaleString('ru-RU') });
@@ -239,7 +207,7 @@ module.exports = {
           },
           {
             name: '🧪 Тестовая статистика',
-            value: 'Демонстрационные данные',
+            value: 'Демонстрационные данные для примера',
             inline: false
           }
         )
@@ -265,6 +233,7 @@ module.exports = {
   async handleButton(interaction) {
     try {
       const customId = interaction.customId;
+      console.log('[grafs] Button clicked:', customId);
       
       // Проверка роли
       const member = interaction.member;
@@ -279,19 +248,21 @@ module.exports = {
       
       if (customId === 'grafs_recent') {
         data = statsTracker.getStatsForDays(7);
-        title = 'Статистика за 7 дней';
+        title = '📊 Статистика за 7 дней';
         emoji = '📊';
       } else if (customId === 'grafs_all') {
         data = statsTracker.getAllStats();
-        title = 'Полная статистика (30 дней)';
+        title = '📈 Полная статистика (30 дней)';
         emoji = '📈';
       } else if (customId === 'grafs_test') {
         data = statsTracker.getTestStats();
-        title = 'Тестовая статистика';
+        title = '🧪 Тестовая статистика';
         emoji = '🧪';
       } else {
         return;
       }
+      
+      console.log('[grafs] Data loaded - days:', Object.keys(data).length);
       
       // Показываем что загружаем
       await interaction.deferUpdate();
@@ -299,44 +270,21 @@ module.exports = {
       // Создаем embed со статистикой
       const statsEmbed = createStatsEmbed(data, title, emoji);
       
-      // Генерируем график
-      const chartImage = await generateChart(data, title);
+      const backRow = new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setCustomId('grafs_back')
+            .setLabel('⬅️ Вернуться')
+            .setStyle(ButtonStyle.Secondary)
+        );
       
-      if (chartImage) {
-        const attachment = new AttachmentBuilder(chartImage, { name: 'stats-chart.png' });
-        statsEmbed.setImage('attachment://stats-chart.png');
-        
-        // Отправляем результат с графиком
-        const backRow = new ActionRowBuilder()
-          .addComponents(
-            new ButtonBuilder()
-              .setCustomId('grafs_back')
-              .setLabel('⬅️ Вернуться')
-              .setStyle(ButtonStyle.Secondary)
-          );
-        
-        await interaction.editReply({
-          embeds: [statsEmbed],
-          files: [attachment],
-          components: [backRow],
-          ephemeral: false
-        });
-      } else {
-        // Если график не сгенерировался, показываем только статистику
-        const backRow = new ActionRowBuilder()
-          .addComponents(
-            new ButtonBuilder()
-              .setCustomId('grafs_back')
-              .setLabel('⬅️ Вернуться')
-              .setStyle(ButtonStyle.Secondary)
-          );
-        
-        await interaction.editReply({
-          embeds: [statsEmbed],
-          components: [backRow],
-          ephemeral: false
-        });
-      }
+      console.log('[grafs] Sending response');
+      
+      await interaction.editReply({
+        embeds: [statsEmbed],
+        components: [backRow],
+        ephemeral: false
+      });
       
     } catch (e) {
       console.error('[grafs] Button handler error:', e);
@@ -391,7 +339,7 @@ module.exports = {
           },
           {
             name: '🧪 Тестовая статистика',
-            value: 'Демонстрационные данные',
+            value: 'Демонстрационные данные для примера',
             inline: false
           }
         )

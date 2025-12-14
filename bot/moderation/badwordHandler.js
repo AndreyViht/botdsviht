@@ -409,42 +409,60 @@ async function checkMessage(message, client) {
     if (!message.content || message.content.length === 0) return;
 
     const content = message.content;
-    const contentWords = content.toLowerCase().split(/\s+/); // Разделяем на слова
     const foundBadwords = [];
     
-    // Проверяем каждое матерное слово
+    // Нормализируем весь текст сообщения сразу
+    const normalizedContent = cleanText(content);
+    const transliteratedContent = englishToRussian(normalizedContent);
+    const contentWords = normalizedContent.split(/\s+/).filter(w => w.length > 0);
+    const transliteratedWords = transliteratedContent.split(/\s+/).filter(w => w.length > 0);
+    
+    // Проверяем каждое матерное слово из словаря
     for (const badword of badwordsList.badwords) {
-      const badwordVariants = normalizeText(badword);
+      const cleanedBadword = cleanText(badword);
       
-      // Проверяем каждое слово в сообщении
-      for (const word of contentWords) {
-        const wordVariants = normalizeText(word);
+      if (cleanedBadword.length === 0) continue; // Пропускаем пустые слова
+      
+      // Проверяем каждое слово в сообщении (как нормализованное, так и транслитерированное)
+      for (let i = 0; i < contentWords.length; i++) {
+        const word = contentWords[i];
+        const transliteratedWord = transliteratedWords[i];
         
-        // DEBUG для интересующих слов
-        if (badword === 'ебало' || badword === 'хуйню' || badword === 'хуйня') {
-          console.log(`[BADWORD DEBUG] Checking word "${word}" against badword "${badword}"`);
-          console.log(`[BADWORD DEBUG] Word variants:`, wordVariants);
-          console.log(`[BADWORD DEBUG] Badword variants:`, badwordVariants);
-        }
+        if (word.length === 0) continue;
         
-        // Проверяем совпадение
-        const cleanedBadword = cleanText(badword);
-        const cleanedWord = cleanText(word);
-        
-        // Проверяем прямое совпадение или содержание (для подслов)
-        const matches = 
-          cleanedWord === cleanedBadword ||
-          wordVariants.some(wv => badwordVariants.some(bv => wv === bv || wv.includes(bv) || bv.includes(wv)));
-        
-        if (matches) {
+        // 1. Прямое совпадение (слово === матерное слово)
+        if (word === cleanedBadword || transliteratedWord === cleanedBadword) {
           if (!foundBadwords.includes(badword)) {
             foundBadwords.push(badword);
-            if (badword === 'ебало' || badword === 'хуйню' || badword === 'хуйня') {
-              console.log(`[BADWORD DEBUG] ✓ MATCHED: "${badword}"`);
-            }
+            console.log(`[BADWORD] ✓ EXACT MATCH: "${badword}" in word "${word}"`);
           }
-          break; // Нашли это слово, переходим к следующему матерному слову
+          break;
         }
+        
+        // 2. Слово содержит матерное слово (для слов без пробелов)
+        if (word.includes(cleanedBadword) || transliteratedWord.includes(cleanedBadword)) {
+          if (!foundBadwords.includes(badword)) {
+            foundBadwords.push(badword);
+            console.log(`[BADWORD] ✓ CONTAINS: "${badword}" in word "${word}"`);
+          }
+          break;
+        }
+        
+        // 3. Матерное слово содержит слово (для частичных совпадений)
+        if ((cleanedBadword.includes(word) || cleanedBadword.includes(transliteratedWord)) && word.length >= 3) {
+          if (!foundBadwords.includes(badword)) {
+            foundBadwords.push(badword);
+            console.log(`[BADWORD] ✓ PARTIAL: word "${word}" is part of badword "${badword}"`);
+          }
+          break;
+        }
+      }
+      
+      // Также проверяем в целом тексте без разделения на слова
+      // Это нужно для текстов без пробелов типа "Вотэтонихуясебе"
+      if ((normalizedContent.includes(cleanedBadword) || transliteratedContent.includes(cleanedBadword)) && !foundBadwords.includes(badword)) {
+        foundBadwords.push(badword);
+        console.log(`[BADWORD] ✓ IN TEXT: "${badword}" found in normalized content`);
       }
     }
 

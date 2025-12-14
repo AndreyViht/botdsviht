@@ -354,9 +354,9 @@ async function findYouTubeUrl(query) {
       // Strongly favor typical song durations (2-8 minutes for most songs, 1-15 min for extended)
       if (seconds >= 120 && seconds <= 480) score += 50; // 2-8 min - ideal for normal songs
       if (seconds >= 30 && seconds <= 120) score += 30;  // 30 sec - 2 min (short versions, intros)
-      if (seconds >= 480 && seconds <= 900) score += 20; // 8-15 min (extended/remixes)
+      if (seconds >= 480 && seconds <= 720) score += 20; // 8-12 min (extended/remixes) - REDUCED from 900
       if (seconds < 30) score -= 100;                     // Too short
-      if (seconds > 1200) score -= 80;                    // Way too long (likely not a song)
+      if (seconds > 720) score -= 100;                    // Too long (> 12 min likely not a song) - REDUCED from 1200
 
       return score;
     }
@@ -367,9 +367,9 @@ async function findYouTubeUrl(query) {
       const a = ((v.author && v.author.name) || (v.owner && v.owner.name) || '').toLowerCase();
       const seconds = v.seconds || 0;
       
-      // Reject extremely short or long videos
+      // Reject extremely short or long videos - STRICTER LIMITS for music
       if (seconds < 30) return false;
-      if (!prefersLong && seconds > 1200) return false; // reject > 20 min unless asking for album/compilation
+      if (!prefersLong && seconds > 720) return false; // reject > 12 min unless asking for album/compilation (WAS 1200)
       
       // Reject gaming content
       if (t.includes('gameplay') || t.includes('minecraft') || a.includes('геймплей')) return false;

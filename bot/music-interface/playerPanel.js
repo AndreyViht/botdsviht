@@ -514,6 +514,16 @@ async function handleSearchSelectMenu(interaction, client) {
       cache.session.isPlaying = true;
     }
     
+    // ⚠️ ВАЖНО: Останавливаем старую музыку перед запуском новой
+    // Это предотвращает ситуацию когда юзер нажимает "найти" пока музыка уже играет
+    try {
+      await musicPlayer.stop(guild).catch(() => null);
+      // Даём время на остановку
+      await new Promise(r => setTimeout(r, 200));
+    } catch (e) {
+      console.warn('Failed to stop old music:', e.message);
+    }
+    
     // Start playing
     try {
       await musicPlayer.playNow(guild, voiceChannel, trackUrl, guild.channels.cache.get(cache.session?.channelId) || null, cache.userId).catch(() => {});

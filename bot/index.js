@@ -815,7 +815,7 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
       // Post announcement modals
-      if (interaction.customId === 'post_modal') {
+      if (interaction.customId && interaction.customId.startsWith('post_modal_')) {
         try {
           const postCommand = require('./commands/post');
           if (postCommand.handleModal) {

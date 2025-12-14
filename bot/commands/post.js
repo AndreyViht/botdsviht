@@ -1,6 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelSelectMenuBuilder } = require('discord.js');
 
-const TARGET_CHANNEL_ID = '1448413112423288903';
 const ALLOWED_ROLE_ID = '1436485697392607303';
 
 // Популярные цвета
@@ -41,7 +40,13 @@ const STICKER_PRESETS = [
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('post')
-    .setDescription('📝 Постить запись в канал записей'),
+    .setDescription('📝 Постить запись в выбранный канал')
+    .addChannelOption(option =>
+      option
+        .setName('channel')
+        .setDescription('Выбери канал для поста')
+        .setRequired(true)
+    ),
 
   async execute(interaction) {
     // Проверка роли
@@ -53,9 +58,29 @@ module.exports = {
       });
     }
 
+    // Получаем выбранный канал
+    const targetChannel = interaction.options.getChannel('channel');
+    
+    if (!targetChannel || !targetChannel.isTextBased()) {
+      return await interaction.reply({
+        content: '❌ Выбери текстовый канал!',
+        ephemeral: true
+      });
+    }
+
+    // Проверяем права бота в канале
+    const botMember = await targetChannel.guild.members.fetch(interaction.client.user.id).catch(() => null);
+    const perms = targetChannel.permissionsFor(botMember || interaction.client.user);
+    if (!perms || !perms.has(['SendMessages', 'EmbedLinks'])) {
+      return await interaction.reply({
+        content: '❌ У бота нет прав на постинг в этот канал!',
+        ephemeral: true
+      });
+    }
+
     // Открываем модальное окно для ввода
     const modal = new ModalBuilder()
-      .setCustomId('post_modal')
+      .setCustomId(`post_modal_${targetChannel.id}`)
       .setTitle('Создание поста');
 
     const titleInput = new TextInputBuilder()
@@ -133,10 +158,21 @@ function parseColor(colorString) {
 
 // Обработчик модального окна
 module.exports.handleModal = async (interaction) => {
-  if (interaction.customId !== 'post_modal') return;
+  if (!interaction.customId.startsWith('post_modal_')) return;
 
   try {
     await interaction.deferReply({ ephemeral: true });
+
+    // Извлекаем ID канала из customId
+    const channelId = interaction.customId.replace('post_modal_', '');
+    const targetChannel = await interaction.client.channels.fetch(channelId).catch(() => null);
+    
+    if (!targetChannel) {
+      return await interaction.editReply({
+        content: '❌ Канал больше не доступен!',
+        ephemeral: true
+      });
+    }
 
     const title = interaction.fields.getTextInputValue('post_title') || null;
     const description = interaction.fields.getTextInputValue('post_description') || null;
@@ -148,14 +184,6 @@ module.exports.handleModal = async (interaction) => {
     if (!title && !description && !imageUrl && !buttonsText) {
       return await interaction.editReply({
         content: '❌ Заполни хотя бы одно поле!',
-        ephemeral: true
-      });
-    }
-
-    const targetChannel = await interaction.client.channels.fetch(TARGET_CHANNEL_ID).catch(() => null);
-    if (!targetChannel) {
-      return await interaction.editReply({
-        content: '❌ Канал записей не найден!',
         ephemeral: true
       });
     }
@@ -232,6 +260,7 @@ module.exports.handleModal = async (interaction) => {
       .setColor(0x2ECC71)
       .setDescription(`[Перейти к посту](${sentMessage.url})`)
       .addFields(
+        { name: 'Канал', value: `<#${channelId}>`, inline: false },
         { name: 'Заголовок', value: title || '❌ Не указан', inline: false },
         { name: 'Текст', value: description ? description.substring(0, 100) + (description.length > 100 ? '...' : '') : '❌ Не указан', inline: false },
         { name: 'Цвет', value: `#${color.toString(16).toUpperCase().padStart(6, '0')}`, inline: true },

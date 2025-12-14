@@ -238,19 +238,25 @@ module.exports.handleModal = async (interaction) => {
 async function updateVoiceChannelName(client) {
   try {
     const voiceChannel = await client.channels.fetch(VOICE_CHANNEL_ID).catch(() => null);
-    if (!voiceChannel) return;
+    if (!voiceChannel) {
+      console.warn('[Reviews] Voice channel not found for name update');
+      return;
+    }
 
     await db.ensureReady();
     const allReviews = db.get('reviews') || { approved: [] };
     const reviewCount = (allReviews.approved || []).length;
     
     const newName = `🤝 Отзывы  - ${reviewCount}`;
+    console.log(`[Reviews] Attempting to update channel name. Current: "${voiceChannel.name}", Target: "${newName}"`);
     
     if (voiceChannel.name !== newName) {
       await voiceChannel.setName(newName).catch(err => {
         console.warn('[Reviews] Could not update channel name:', err.message);
       });
-      console.log(`[Reviews] Updated channel name to: ${newName}`);
+      console.log(`[Reviews] ✅ Updated channel name to: ${newName}`);
+    } else {
+      console.log(`[Reviews] Channel name already correct: ${newName}`);
     }
   } catch (error) {
     console.error('[Reviews] Error updating voice channel name:', error);
@@ -388,6 +394,10 @@ module.exports.connectToVoiceChannel = async (client) => {
     } catch (err) {
       console.warn('[Reviews] Could not join voice channel:', err.message);
     }
+
+    // Обновляем название канала при подключении
+    await updateVoiceChannelName(client);
+
   } catch (error) {
     console.error('[Reviews] Error connecting to voice channel:', error);
   }

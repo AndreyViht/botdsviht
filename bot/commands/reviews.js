@@ -72,11 +72,8 @@ module.exports = {
 module.exports.handleButton = async (interaction) => {
   if (!interaction.customId.startsWith('review_')) return;
 
-  console.log('[Reviews] Button handler called:', interaction.customId);
-  
   try {
     if (interaction.customId === 'review_leave') {
-      console.log('[Reviews] Opening review modal for user:', interaction.user.id);
       const modal = new ModalBuilder()
         .setCustomId('review_submit_modal')
         .setTitle('Оставить отзыв');
@@ -104,9 +101,7 @@ module.exports.handleButton = async (interaction) => {
         new ActionRowBuilder().addComponents(ratingInput)
       );
 
-      console.log('[Reviews] Showing modal...');
       await interaction.showModal(modal);
-      console.log('[Reviews] Modal shown successfully');
       return;
     }
 
@@ -170,8 +165,18 @@ module.exports.handleModal = async (interaction) => {
       });
     }
 
-    // Сохраняем черновик в БД
+    // Проверяем, есть ли уже отзыв от этого пользователя
     await db.ensureReady();
+    const allReviews = db.get('reviews') || { approved: [] };
+    const userReviewExists = (allReviews.approved || []).some(r => r.userId === interaction.user.id);
+    
+    if (userReviewExists) {
+      return await interaction.editReply({
+        content: '⚠️ Вы уже опубликовали отзыв. Один пользователь - один отзыв.\n\nПримечание: Удалить или изменить отзыв нельзя, так как это конечный результат.'
+      });
+    }
+
+    // Сохраняем черновик в БД
     const pendingReviews = db.get('pending_reviews') || {};
     const reviewId = `review_${interaction.user.id}_${Date.now()}`;
     
@@ -229,6 +234,29 @@ module.exports.handleModal = async (interaction) => {
   }
 };
 
+// Функция для обновления названия канала с количеством отзывов
+async function updateVoiceChannelName(client) {
+  try {
+    const voiceChannel = await client.channels.fetch(VOICE_CHANNEL_ID).catch(() => null);
+    if (!voiceChannel) return;
+
+    await db.ensureReady();
+    const allReviews = db.get('reviews') || { approved: [] };
+    const reviewCount = (allReviews.approved || []).length;
+    
+    const newName = `🤝 Отзывы  - ${reviewCount}`;
+    
+    if (voiceChannel.name !== newName) {
+      await voiceChannel.setName(newName).catch(err => {
+        console.warn('[Reviews] Could not update channel name:', err.message);
+      });
+      console.log(`[Reviews] Updated channel name to: ${newName}`);
+    }
+  } catch (error) {
+    console.error('[Reviews] Error updating voice channel name:', error);
+  }
+}
+
 // Обработчик кнопок принять/отказать
 module.exports.handleReviewButton = async (interaction) => {
   const customId = interaction.customId;
@@ -256,6 +284,14 @@ module.exports.handleReviewButton = async (interaction) => {
       const allReviews = db.get('reviews') || { approved: [] };
       if (!Array.isArray(allReviews.approved)) allReviews.approved = [];
       
+      // Проверяем не есть ли уже отзыв от этого пользователя
+      const userReviewExists = allReviews.approved.some(r => r.userId === review.userId);
+      if (userReviewExists) {
+        return await interaction.editReply({
+          content: '⚠️ У этого пользователя уже есть опубликованный отзыв. Один пользователь - один отзыв.'
+        });
+      }
+      
       allReviews.approved.push({
         userId: review.userId,
         text: review.text,
@@ -277,6 +313,9 @@ module.exports.handleReviewButton = async (interaction) => {
 
         await voiceChannel.send({ embeds: [reviewEmbed] });
       }
+
+      // Обновляем название канала с новым количеством отзывов
+      await updateVoiceChannelName(interaction.client);
 
       // Уведомляем пользователя
       if (user) {
@@ -413,6 +452,9 @@ module.exports.ensureReviewsPanel = async (client) => {
     // Сохраняем ID панели в БД
     await db.set('reviews_panel_id', message.id);
     console.log('[Reviews] Reviews panel created and saved:', message.id);
+
+    // Обновляем название канала с текущим количеством отзывов
+    await updateVoiceChannelName(client);
 
   } catch (error) {
     console.error('[Reviews] Error ensuring reviews panel:', error);

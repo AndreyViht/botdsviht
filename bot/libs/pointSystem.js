@@ -194,14 +194,6 @@ async function addMessage(userId, client) {
     console.error('[MESSAGES] Error:', e);
   }
 }
-      }
-    }
-    
-  } catch (e) {
-    console.error('[MESSAGES] Error adding message:', e);
-  }
-  return null;
-}
 
 // ============================================
 // СИСТЕМА ДОСТИЖЕНИЙ

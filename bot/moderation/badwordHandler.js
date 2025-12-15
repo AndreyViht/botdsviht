@@ -467,8 +467,9 @@ async function checkMessage(message, client) {
         }
         
         // 2. Слово содержит матерное слово (для слов без пробелов)
-        // НО: для очень коротких badwords (< 3 букв), требуем только exact match, чтобы избежать false positives
-        if (cleanedBadword.length >= 3) {
+        // НО: для коротких badwords (< 4 букв), требуем только exact match, чтобы избежать false positives
+        // Потому что "бля", "ля", "ня" и т.д. часто встречаются в нормальных словах (употребляй, полная, и т.д.)
+        if (cleanedBadword.length >= 4) {
           if (word.includes(cleanedBadword) || transliteratedWord.includes(cleanedBadword)) {
             if (!foundBadwords.includes(badword)) {
               foundBadwords.push(badword);
@@ -491,8 +492,8 @@ async function checkMessage(message, client) {
       
       // Также проверяем в целом тексте без разделения на слова
       // Это нужно для текстов без пробелов типа "Вотэтонихуясебе"
-      // НО: для коротких badwords требуем их длину >= 3, чтобы избежать false positives
-      if (cleanedBadword.length >= 3) {
+      // НО: для коротких badwords требуем их длину >= 4, чтобы избежать false positives в нормальных словах
+      if (cleanedBadword.length >= 4) {
         if ((normalizedContent.includes(cleanedBadword) || transliteratedContent.includes(cleanedBadword)) && !foundBadwords.includes(badword)) {
           foundBadwords.push(badword);
           console.log(`[BADWORD] ✓ IN TEXT: "${badword}" found in normalized content`);

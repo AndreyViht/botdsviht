@@ -38,12 +38,10 @@ module.exports = {
       const messageIds = new Set();
       
       messages.forEach(msg => {
-        // Проверяем что это отзыв (есть embed с заголовком "Отзыв")
-        if (msg.embeds && msg.embeds.length > 0) {
-          const embed = msg.embeds[0];
-          if (embed.title && embed.title.includes('Отзыв')) {
-            messageIds.add(msg.id);
-          }
+        // Проверяем что это отзыв от бота (есть embed)
+        if (msg.author.bot && msg.embeds && msg.embeds.length > 0) {
+          messageIds.add(msg.id);
+          console.log(`[SYNC-REVIEWS] ✓ Найден отзыв: ${msg.id}`);
         }
       });
 

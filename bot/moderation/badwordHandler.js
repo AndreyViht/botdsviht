@@ -425,6 +425,12 @@ async function checkMessage(message, client) {
       return;
     }
 
+    // Пропускаем сообщения от людей с ролью Founder (иммунитет от фильтра)
+    const FOUNDER_ROLE_ID = '1436485697392607303';
+    if (message.member?.roles.cache.has(FOUNDER_ROLE_ID)) {
+      return;
+    }
+
     const content = message.content;
     console.log(`[BADWORD-CHECK] Проверка сообщения: "${content.slice(0, 50)}"`);
     const foundBadwords = [];

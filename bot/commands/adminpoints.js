@@ -13,7 +13,7 @@ module.exports = {
 
   async execute(interaction) {
     // Проверяем роль
-    if (!interaction.member.roles.has(ADMIN_ROLE_ID)) {
+    if (!interaction.member.roles.cache.has(ADMIN_ROLE_ID)) {
       return await interaction.reply({
         content: '❌ У тебя нет доступа к этой команде. Требуется специальная роль администратора.',
         ephemeral: true

@@ -275,7 +275,18 @@ client.on('interactionCreate', async (interaction) => {
           try { await handleControlPanelButton(interaction); } catch (err) { console.error('Control panel button error', err); await safeReply(interaction, { content: 'Ошибка при обработке кнопки.', ephemeral: true }); }
           return;
         }
-      if (interaction.customId.startsWith('music_') || interaction.customId.startsWith('radio_')) {
+      // Новый обработчик для Jockie Music UI
+      if (interaction.customId && interaction.customId.startsWith('music_')) {
+        try { 
+          const musicHandler = require('./menus/musicHandler');
+          await musicHandler.handleMusicButtons(interaction); 
+        } catch (err) { 
+          console.error('Music button error', err); 
+          await safeReply(interaction, { content: 'Ошибка при обработке кнопки музыки.', ephemeral: true }); 
+        }
+        return;
+      }
+      if (interaction.customId.startsWith('radio_')) {
         try { await handlePlayerPanelButton(interaction, client); } catch (err) { console.error('Music button error', err); await safeReply(interaction, { content: 'Ошибка при обработке кнопки музыки.', ephemeral: true }); }
         return;
       }
@@ -716,6 +727,17 @@ client.on('interactionCreate', async (interaction) => {
           await musicPlayer.playNow(guild, voiceChannel, query, interaction.channel, interaction.user.id).catch(async (e) => { console.error('playNow error', e); });
           return;
         } catch (e) { console.error('music_modal submit error', e); return await safeReply(interaction, { content: 'Ошибка при обработке формы музыки.', ephemeral: true }); }
+      }
+      // Jockie Music modal handler
+      if (interaction.customId === 'music_play_modal') {
+        try {
+          const musicHandler = require('./menus/musicHandler');
+          await musicHandler.handleMusicModals(interaction);
+        } catch (err) {
+          console.error('Music modal error', err);
+          await safeReply(interaction, { content: 'Ошибка при обработке формы.', ephemeral: true });
+        }
+        return;
       }
       // Music modal: add to queue
       if (interaction.customId === 'music_modal_queue') {

@@ -271,14 +271,16 @@ client.on('interactionCreate', async (interaction) => {
           try { await handleControlPanelButton(interaction); } catch (err) { console.error('Control panel button error', err); await safeReply(interaction, { content: 'Ошибка при обработке кнопки.', ephemeral: true }); }
           return;
         }
-      // Новый обработчик для Jockie Music UI
-      if (interaction.customId && (interaction.customId.startsWith('music_') || interaction.customId.startsWith('jockie_'))) {
+      // Обработчик новой системы музыки (YouTube + SoundCloud)
+      if (interaction.customId && interaction.customId.startsWith('music_')) {
         try { 
-          const musicHandler = require('./menus/musicHandler');
-          await musicHandler.handleMusicButtons(interaction); 
+          const musicHandler = require('./music/musicHandlers');
+          if (interaction.isButton()) await musicHandler.handleMusicButtons(interaction);
+          if (interaction.isStringSelectMenu()) await musicHandler.handleMusicSelect(interaction);
+          if (interaction.isModalSubmit()) await musicHandler.handleMusicSearch(interaction);
         } catch (err) { 
-          console.error('Music button error', err); 
-          await safeReply(interaction, { content: 'Ошибка при обработке кнопки музыки.', ephemeral: true }); 
+          console.error('[MUSIC] Error:', err); 
+          await safeReply(interaction, { content: '❌ Ошибка при обработке музыки.', ephemeral: true }); 
         }
         return;
       }
@@ -1080,44 +1082,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         console.error(`[VOICE] Failed to send LEAVE/KICK notification: ${e.message}`);
       }
     }
-
-    // Обновляем статус музыки если Jockie подключился
-    if (member.user.username === 'Jockie Music' || member.user.id === '231234716607356930') {
-      const { postMusicPanel } = require('./menus/musicPanel');
-      const db = require('./libs/db');
-      
-      if (newState.channel && !oldState.channel) {
-        // Jockie подключился к каналу
-        try {
-          await db.ensureReady();
-          let musicState = db.get('musicState') || {};
-          musicState.isPlaying = true;
-          musicState.connectedChannel = newState.channel.id;
-          musicState.connectedAt = Date.now();
-          db.set('musicState', musicState);
-          
-          // Обновляем плеер
-          await postMusicPanel(client);
-          console.log('[MUSIC] Jockie connected - updating panel');
-        } catch (e) {
-          console.warn('[MUSIC] Failed to update panel:', e.message);
-        }
-      } else if (!newState.channel && oldState.channel) {
-        // Jockie отключился
-        try {
-          await db.ensureReady();
-          let musicState = db.get('musicState') || {};
-          musicState.isPlaying = false;
-          db.set('musicState', musicState);
-          
-          // Обновляем плеер
-          await postMusicPanel(client);
-          console.log('[MUSIC] Jockie disconnected - updating panel');
-        } catch (e) {
-          console.warn('[MUSIC] Failed to update panel:', e.message);
-        }
-      }
-    }
   } catch (e) {
     console.error('[VOICE] voiceStateUpdate handler error:', e && e.message ? e.message : e);
   }
@@ -1404,6 +1368,15 @@ client.once('ready', async () => {
     }
   } catch (e) {
     console.warn('Reviews initialization failed:', e.message);
+  }
+
+  // Инициализируем музыкальную панель
+  try {
+    const { updateMusicPanel } = require('./music/musicHandlers');
+    await updateMusicPanel(client);
+    console.log('✅ Music panel initialized');
+  } catch (e) {
+    console.warn('[MUSIC] Failed to initialize panel:', e.message);
   }
 
   // Connect to default music voice channel on startup

@@ -186,8 +186,6 @@ module.exports = {
     const customId = interaction.customId;
     const guildId = interaction.guildId;
 
-    await interaction.deferReply({ ephemeral: true });
-
     try {
       if (customId === 'music_search') {
         const modal = new ModalBuilder()
@@ -208,6 +206,8 @@ module.exports = {
         await interaction.showModal(modal);
         return;
       }
+
+      await interaction.deferReply({ ephemeral: true });
 
       if (customId === 'music_skip') {
         playerManager.skip(guildId);
@@ -253,7 +253,11 @@ module.exports = {
       }
     } catch (e) {
       console.error('[MUSIC HANDLER] Button error:', e);
-      await interaction.editReply('❌ Ошибка');
+      try {
+        await interaction.editReply('❌ Ошибка');
+      } catch (e2) {
+        await interaction.reply({ content: '❌ Ошибка', ephemeral: true }).catch(() => {});
+      }
     }
   }
 };

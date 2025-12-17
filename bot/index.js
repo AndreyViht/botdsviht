@@ -276,7 +276,7 @@ client.on('interactionCreate', async (interaction) => {
           return;
         }
       // Новый обработчик для Jockie Music UI
-      if (interaction.customId && interaction.customId.startsWith('music_')) {
+      if (interaction.customId && (interaction.customId.startsWith('music_') || interaction.customId.startsWith('jockie_'))) {
         try { 
           const musicHandler = require('./menus/musicHandler');
           await musicHandler.handleMusicButtons(interaction); 
@@ -729,7 +729,7 @@ client.on('interactionCreate', async (interaction) => {
         } catch (e) { console.error('music_modal submit error', e); return await safeReply(interaction, { content: 'Ошибка при обработке формы музыки.', ephemeral: true }); }
       }
       // Jockie Music modal handler
-      if (interaction.customId === 'music_play_modal') {
+      if (interaction.customId === 'music_play_modal' || interaction.customId === 'jockie_play_modal') {
         try {
           const musicHandler = require('./menus/musicHandler');
           await musicHandler.handleMusicModals(interaction);
@@ -1853,6 +1853,12 @@ client.once('ready', async () => {
       }
     }
   } catch (e) { console.warn('Failed to post price panel on ready:', e && e.message ? e.message : e); }
+  // Post Music panel with Jockie Music controls
+  try {
+    const { postMusicPanel } = require('./menus/musicPanel');
+    await postMusicPanel(client);
+    setInterval(async () => { try { await postMusicPanel(client); } catch (e) { /* ignore */ } }, 5 * 60 * 1000);
+  } catch (e) { console.warn('Failed to post music panel on ready:', e && e.message ? e.message : e); }
   // Post Post Manager panel
   try {
     await postPostManagerPanel(client);

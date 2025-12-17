@@ -7,9 +7,9 @@ module.exports = {
     const customId = interaction.customId;
 
     // Включить музыку - модальное окно для ввода песни
-    if (customId === 'music_play') {
+    if (customId === 'music_play' || customId === 'jockie_play') {
       const modal = new ModalBuilder()
-        .setCustomId('music_play_modal')
+        .setCustomId('jockie_play_modal')
         .setTitle('🎵 Включить музыку');
 
       const songInput = new TextInputBuilder()
@@ -26,10 +26,10 @@ module.exports = {
     }
 
     // Пропустить трек
-    if (customId === 'music_skip') {
+    if (customId === 'music_skip' || customId === 'jockie_skip') {
       const embed = new EmbedBuilder()
         .setTitle('⏭️ Пропуск трека')
-        .setDescription('Используй команду:\n\n`m!skip`')
+        .setDescription('Используй команду Jockie Music:\n\n`m!skip`\n\nИли напиши её в чате!')
         .setColor(0x1DB954)
         .setTimestamp();
 
@@ -37,10 +37,10 @@ module.exports = {
     }
 
     // Выйти из канала
-    if (customId === 'music_leave') {
+    if (customId === 'music_leave' || customId === 'jockie_leave') {
       const embed = new EmbedBuilder()
         .setTitle('🚪 Выход из канала')
-        .setDescription('Используй команду:\n\n`m!leave`')
+        .setDescription('Используй команду Jockie Music:\n\n`m!leave`\n\nИли напиши её в чате!')
         .setColor(0xFF0000)
         .setTimestamp();
 
@@ -48,7 +48,7 @@ module.exports = {
     }
 
     // Справка
-    if (customId === 'music_help') {
+    if (customId === 'music_help' || customId === 'jockie_help') {
       const embed = new EmbedBuilder()
         .setTitle('❓ Справка Jockie Music')
         .setDescription('Вот основные команды:')
@@ -79,22 +79,33 @@ module.exports = {
 
       await interaction.reply({ embeds: [embed], ephemeral: true });
     }
+
+    // Очередь
+    if (customId === 'jockie_queue') {
+      const embed = new EmbedBuilder()
+        .setTitle('📋 Очередь')
+        .setDescription('Используй команду Jockie Music:\n\n`m!queue`\n\nЧтобы увидеть список треков в очереди!')
+        .setColor(0x1DB954)
+        .setTimestamp();
+
+      await interaction.reply({ embeds: [embed], ephemeral: true });
+    }
   },
 
   async handleMusicModals(interaction) {
     if (!interaction.isModalSubmit()) return;
 
-    if (interaction.customId === 'music_play_modal') {
+    if (interaction.customId === 'jockie_play_modal' || interaction.customId === 'music_play_modal') {
       const songName = interaction.fields.getTextInputValue('song_name');
 
       const embed = new EmbedBuilder()
         .setTitle('▶️ Воспроизведение')
-        .setDescription(`Используй эту команду в канале где находится Jockie Music бот:\n\n\`m!play ${songName}\``)
+        .setDescription(`Используй эту команду в чате или напрямую:\n\n\`m!play ${songName}\``)
         .setColor(0x1DB954)
         .addFields(
           {
             name: '💡 Подсказка',
-            value: 'Убедись что ты находишься в голосовом канале перед тем как вводить команду!'
+            value: 'Убедись что ты находишься в голосовом канале перед тем как вводить команду!\n\nБот Jockie Music автоматически присоединится к твоему каналу.'
           }
         )
         .setTimestamp();

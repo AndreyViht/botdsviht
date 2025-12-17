@@ -2,7 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('плеер')
+    .setName('player')
     .setDescription('🎵 Управление музыкой через Jockie Music'),
 
   async execute(interaction) {

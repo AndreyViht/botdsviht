@@ -1266,8 +1266,6 @@ client.once('ready', async () => {
       await ch.send({ embeds: [embed] }).catch(() => null);
     }
   } catch (e) { console.warn('Failed to send bot ready notification:', e && e.message); }
-    console.warn('[PLAYER] Failed to schedule periodic refresh:', e.message);
-  }
   
   // Auto-register slash commands if enabled via env
   try {

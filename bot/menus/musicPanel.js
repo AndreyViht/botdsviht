@@ -14,10 +14,14 @@ async function postMusicPanel(client) {
       return;
     }
 
+    // Проверяем статус музыки
+    const musicState = db.get('musicState') || {};
+    const isPlaying = musicState.isPlaying || false;
+
     const embed = new EmbedBuilder()
       .setTitle('🎵 Музыкальный плеер')
-      .setDescription('Управление музыкой через **Jockie Music**')
-      .setColor(0x1DB954)
+      .setDescription(isPlaying ? '🎶 **Музыка играет!**' : 'Управление музыкой через **Jockie Music**')
+      .setColor(isPlaying ? 0x1DB954 : 0x1DB954)
       .addFields(
         {
           name: '▶️ Включить',
@@ -40,21 +44,34 @@ async function postMusicPanel(client) {
           inline: false
         }
       )
-      .setFooter({ text: 'Управление музыкой Jockie Music' })
+      .setFooter({ text: isPlaying ? '🎵 Плеер активен' : 'Управление музыкой Jockie Music' })
       .setTimestamp();
 
+    // Динамические кнопки в зависимости от статуса
     const row1 = new ActionRowBuilder()
       .addComponents(
-        new ButtonBuilder()
-          .setLabel('Включить музыку')
-          .setEmoji('▶️')
-          .setStyle(ButtonStyle.Success)
-          .setCustomId('jockie_play'),
-        new ButtonBuilder()
-          .setLabel('Пропустить')
-          .setEmoji('⏭️')
-          .setStyle(ButtonStyle.Primary)
-          .setCustomId('jockie_skip'),
+        isPlaying 
+          ? new ButtonBuilder()
+              .setLabel('Stop')
+              .setEmoji('⏹️')
+              .setStyle(ButtonStyle.Danger)
+              .setCustomId('jockie_stop')
+          : new ButtonBuilder()
+              .setLabel('Включить музыку')
+              .setEmoji('▶️')
+              .setStyle(ButtonStyle.Success)
+              .setCustomId('jockie_play'),
+        isPlaying
+          ? new ButtonBuilder()
+              .setLabel('Next')
+              .setEmoji('⏭️')
+              .setStyle(ButtonStyle.Primary)
+              .setCustomId('jockie_skip')
+          : new ButtonBuilder()
+              .setLabel('Очередь')
+              .setEmoji('📋')
+              .setStyle(ButtonStyle.Secondary)
+              .setCustomId('jockie_queue'),
         new ButtonBuilder()
           .setLabel('Выход')
           .setEmoji('🚪')
@@ -68,12 +85,7 @@ async function postMusicPanel(client) {
           .setLabel('Справка')
           .setEmoji('❓')
           .setStyle(ButtonStyle.Secondary)
-          .setCustomId('jockie_help'),
-        new ButtonBuilder()
-          .setLabel('Очередь')
-          .setEmoji('📋')
-          .setStyle(ButtonStyle.Secondary)
-          .setCustomId('jockie_queue')
+          .setCustomId('jockie_help')
       );
 
     const panelRecord = db.get(MUSIC_PANEL_KEY);

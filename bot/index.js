@@ -1080,6 +1080,44 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         console.error(`[VOICE] Failed to send LEAVE/KICK notification: ${e.message}`);
       }
     }
+
+    // Обновляем статус музыки если Jockie подключился
+    if (member.user.username === 'Jockie Music' || member.user.id === '231234716607356930') {
+      const { postMusicPanel } = require('./menus/musicPanel');
+      const db = require('./libs/db');
+      
+      if (newState.channel && !oldState.channel) {
+        // Jockie подключился к каналу
+        try {
+          await db.ensureReady();
+          let musicState = db.get('musicState') || {};
+          musicState.isPlaying = true;
+          musicState.connectedChannel = newState.channel.id;
+          musicState.connectedAt = Date.now();
+          db.set('musicState', musicState);
+          
+          // Обновляем плеер
+          await postMusicPanel(client);
+          console.log('[MUSIC] Jockie connected - updating panel');
+        } catch (e) {
+          console.warn('[MUSIC] Failed to update panel:', e.message);
+        }
+      } else if (!newState.channel && oldState.channel) {
+        // Jockie отключился
+        try {
+          await db.ensureReady();
+          let musicState = db.get('musicState') || {};
+          musicState.isPlaying = false;
+          db.set('musicState', musicState);
+          
+          // Обновляем плеер
+          await postMusicPanel(client);
+          console.log('[MUSIC] Jockie disconnected - updating panel');
+        } catch (e) {
+          console.warn('[MUSIC] Failed to update panel:', e.message);
+        }
+      }
+    }
   } catch (e) {
     console.error('[VOICE] voiceStateUpdate handler error:', e && e.message ? e.message : e);
   }

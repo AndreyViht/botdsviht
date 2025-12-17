@@ -1,4 +1,5 @@
-const { EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const db = require('../libs/db');
 
 module.exports = {
   async handleMusicButtons(interaction) {
@@ -27,51 +28,71 @@ module.exports = {
 
     // Пропустить трек
     if (customId === 'music_skip' || customId === 'jockie_skip') {
-      const embed = new EmbedBuilder()
-        .setTitle('⏭️ Пропуск трека')
-        .setDescription('Используй команду Jockie Music:\n\n`m!skip`\n\nИли напиши её в чате!')
-        .setColor(0x1DB954)
-        .setTimestamp();
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        await interaction.channel.send('m!skip');
+        await interaction.editReply({
+          content: '⏭️ Трек пропущен!',
+          ephemeral: true
+        });
+      } catch (e) {
+        await interaction.editReply({
+          content: '❌ Ошибка при пропуске трека.',
+          ephemeral: true
+        });
+      }
+    }
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+    // Остановить музыку
+    if (customId === 'music_stop' || customId === 'jockie_stop') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        await interaction.channel.send('m!stop');
+        await interaction.editReply({
+          content: '⏹️ Музыка остановлена!',
+          ephemeral: true
+        });
+      } catch (e) {
+        await interaction.editReply({
+          content: '❌ Ошибка при остановке.',
+          ephemeral: true
+        });
+      }
     }
 
     // Выйти из канала
     if (customId === 'music_leave' || customId === 'jockie_leave') {
-      const embed = new EmbedBuilder()
-        .setTitle('🚪 Выход из канала')
-        .setDescription('Используй команду Jockie Music:\n\n`m!leave`\n\nИли напиши её в чате!')
-        .setColor(0xFF0000)
-        .setTimestamp();
-
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        await interaction.channel.send('m!leave');
+        await interaction.editReply({
+          content: '🚪 Бот отключился!',
+          ephemeral: true
+        });
+      } catch (e) {
+        await interaction.editReply({
+          content: '❌ Ошибка при отключении.',
+          ephemeral: true
+        });
+      }
     }
 
     // Справка
     if (customId === 'music_help' || customId === 'jockie_help') {
       const embed = new EmbedBuilder()
         .setTitle('❓ Справка Jockie Music')
-        .setDescription('Вот основные команды:')
+        .setDescription('Основные команды:')
         .setColor(0x1DB954)
         .addFields(
           {
             name: '▶️ Воспроизведение',
-            value: '`m!play <песня>` - Включить музыку\n`m!skip` - Пропустить\n`m!leave` - Выход',
+            value: '`m!play <песня>` - Включить\n`m!skip` - Пропустить\n`m!stop` - Остановить',
             inline: false
           },
           {
             name: '📋 Очередь',
-            value: '`m!queue` - Показать очередь\n`m!nowplaying` - Текущая песня',
+            value: '`m!queue` - Очередь\n`m!nowplaying` - Текущий трек',
             inline: false
-          },
-          {
-            name: '⚙️ Опции play',
-            value: '`--shuffle` - Перемешать\n`--insert` - Вставить в очередь\n`--now` - Включить сразу',
-            inline: false
-          },
-          {
-            name: '🔗 Где найти помощь',
-            value: 'Используй `m!help` для полного списка или посети сайт Jockie Music'
           }
         )
         .setFooter({ text: 'Управление музыкой' })
@@ -82,13 +103,19 @@ module.exports = {
 
     // Очередь
     if (customId === 'jockie_queue') {
-      const embed = new EmbedBuilder()
-        .setTitle('📋 Очередь')
-        .setDescription('Используй команду Jockie Music:\n\n`m!queue`\n\nЧтобы увидеть список треков в очереди!')
-        .setColor(0x1DB954)
-        .setTimestamp();
-
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        await interaction.channel.send('m!queue');
+        await interaction.editReply({
+          content: '📋 Очередь загружается...',
+          ephemeral: true
+        });
+      } catch (e) {
+        await interaction.editReply({
+          content: '❌ Ошибка при загрузке очереди.',
+          ephemeral: true
+        });
+      }
     }
   },
 
@@ -96,21 +123,44 @@ module.exports = {
     if (!interaction.isModalSubmit()) return;
 
     if (interaction.customId === 'jockie_play_modal' || interaction.customId === 'music_play_modal') {
-      const songName = interaction.fields.getTextInputValue('song_name');
+      await interaction.deferReply({ ephemeral: true });
+      
+      try {
+        const songName = interaction.fields.getTextInputValue('song_name');
+        const member = interaction.member;
 
-      const embed = new EmbedBuilder()
-        .setTitle('▶️ Воспроизведение')
-        .setDescription(`Используй эту команду в чате или напрямую:\n\n\`m!play ${songName}\``)
-        .setColor(0x1DB954)
-        .addFields(
-          {
-            name: '💡 Подсказка',
-            value: 'Убедись что ты находишься в голосовом канале перед тем как вводить команду!\n\nБот Jockie Music автоматически присоединится к твоему каналу.'
-          }
-        )
-        .setTimestamp();
+        // Проверка: пользователь в голосовом канале?
+        if (!member.voice.channel) {
+          await interaction.editReply({
+            content: '❌ Ты должен быть в голосовом канале!',
+            ephemeral: true
+          });
+          return;
+        }
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+        // Отправляем команду Jockie Music с Spotify режимом
+        const command = `m!play --source spotify ${songName}`;
+        await interaction.channel.send(command);
+
+        // Сохраняем в БД что музыка играет
+        await db.ensureReady();
+        let musicState = db.get('musicState') || {};
+        musicState.isPlaying = true;
+        musicState.lastChannel = interaction.channelId;
+        musicState.lastUser = interaction.user.id;
+        db.set('musicState', musicState);
+
+        await interaction.editReply({
+          content: `▶️ Запускаю: **${songName}**\n🎵 Spotify режим активирован!`,
+          ephemeral: true
+        });
+      } catch (e) {
+        console.error('Ошибка при запуске музыки:', e);
+        await interaction.editReply({
+          content: '❌ Ошибка при запуске музыки.',
+          ephemeral: true
+        });
+      }
     }
   }
 };

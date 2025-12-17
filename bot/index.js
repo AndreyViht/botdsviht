@@ -55,13 +55,9 @@ if (fs.existsSync(commandsPath)) {
 }
 // db already required above
 const { sendPrompt } = require('./ai/vihtAi');
-const musicPlayer = require('./music/player2');
-const { handleMusicButton, updateControlMessageWithError } = require('./music-interface/musicHandler');
-const { handleControlPanelButton } = require('./music-interface/controlPanelHandler');
 const { handlePriceButton } = require('./price/priceHandler');
 const { handleAiButton, createAiPanelEmbed, makeButtons: makeAiButtons } = require('./ai/aiHandler');
 const { ensureMenuPanel, handleMenuButton } = require('./menus/menuHandler');
-const { postPlayerMessage, handlePlayerPanelButton, handlePlayerPanelModal } = require('./music-interface/playerPanel');
 const { postPostManagerPanel, handlePostManagerButton, handlePostManagerSelect, handlePostManagerModal } = require('./post-manager/postManager');
 // optional helpers
 let handleReactionAdd = null;
@@ -373,110 +369,6 @@ client.on('interactionCreate', async (interaction) => {
         } catch (err) {
           console.error('DM menu button error', err);
           await safeReply(interaction, { content: 'Ошибка при обработке меню.', ephemeral: true });
-        }
-        return;
-      }
-      // DM lounge player buttons
-      if (interaction.customId && interaction.customId.startsWith('dm_lounge_')) {
-        try {
-          const cid = interaction.customId;
-          // find a guild where this user is in a voice channel and bot is connected
-          let targetGuild = null;
-          for (const g of interaction.client.guilds.cache.values()) {
-            try {
-              const member = await g.members.fetch(interaction.user.id).catch(() => null);
-              if (!member) continue;
-              const vch = member.voice && member.voice.channel ? member.voice.channel : null;
-              const botMember = await g.members.fetch(interaction.client.user.id).catch(() => null);
-              if (vch && botMember && botMember.voice && botMember.voice.channel && botMember.voice.channel.id === vch.id) {
-                targetGuild = g; break;
-              }
-            } catch (e) { /* ignore */ }
-          }
-          if (!targetGuild) { await safeReply(interaction, { content: '❌ Не найден подключённый голосовой канал для управления.', ephemeral: true }); return; }
-          const musicPlayer = require('./music/player2');
-          if (cid === 'dm_lounge_pause') {
-            await musicPlayer.pause(targetGuild).catch(() => {});
-            await safeReply(interaction, { content: '⏸ Пауза отправлена.', ephemeral: true });
-            return;
-          }
-          if (cid === 'dm_lounge_skip') {
-            await musicPlayer.skip(targetGuild).catch(() => {});
-            await safeReply(interaction, { content: '⏭ Трек пропущен.', ephemeral: true });
-            return;
-          }
-          if (cid === 'dm_lounge_repeat') {
-            try {
-              const newState = await musicPlayer.toggleRepeat(targetGuild.id).catch(() => null);
-              await safeReply(interaction, { content: `🔁 Repeat is now ${newState ? 'ON' : 'OFF'}.`, ephemeral: true });
-            } catch (e) { await safeReply(interaction, { content: 'Ошибка при переключении Repeat.', ephemeral: true }); }
-            return;
-          }
-          if (cid === 'dm_lounge_shuffle') {
-            try {
-              const newState = await musicPlayer.toggleShuffle(targetGuild.id).catch(() => null);
-              await safeReply(interaction, { content: `🔀 Shuffle is now ${newState ? 'ON' : 'OFF'}.`, ephemeral: true });
-            } catch (e) { await safeReply(interaction, { content: 'Ошибка при переключении Shuffle.', ephemeral: true }); }
-            return;
-          }
-          if (cid === 'dm_lounge_close') {
-            try { await interaction.message.delete().catch(() => {}); } catch (e) {}
-            await safeReply(interaction, { content: 'Окно Lounge закрыто.', ephemeral: true });
-            return;
-          }
-        } catch (err) {
-          console.error('DM lounge handler error', err);
-          await safeReply(interaction, { content: 'Ошибка при управлении Lounge.', ephemeral: true });
-        }
-        return;
-      }
-      // Music search button selection
-      if (interaction.customId && interaction.customId.startsWith('music_search_btn_')) {
-        try {
-          const parts = interaction.customId.split('_');
-          const searchId = [parts[3], parts[4]].join('_'); // reconstruct searchId
-          const trackIdx = parseInt(parts[5], 10);
-          const cache = global._musicSearchCache && global._musicSearchCache[searchId];
-          if (!cache) {
-            await safeReply(interaction, { content: '❌ Поиск истёк. Попробуйте ещё раз.', ephemeral: true });
-            return;
-          }
-          const candidate = cache.candidates[trackIdx];
-          if (!candidate) {
-            await safeReply(interaction, { content: '❌ Трек не найден.', ephemeral: true });
-            return;
-          }
-          const guild = interaction.guild || (client && await client.guilds.fetch(cache.guildId).catch(() => null));
-          const voiceChannel = guild && await guild.channels.fetch(cache.voiceChannelId).catch(() => null);
-          if (!guild || !voiceChannel) {
-            await safeReply(interaction, { content: '❌ Не удалось найти сервер или голосовой канал.', ephemeral: true });
-            return;
-          }
-          const query = candidate.url || candidate.title || candidate;
-          await safeReply(interaction, { content: `🎵 Начинаю воспроизведение "${(candidate.title || '').slice(0, 50)}"...`, ephemeral: true });
-
-          // Try playing this candidate; if it fails, try next candidates from cache
-          let played = false;
-          const candidatesList = cache.candidates || [];
-          for (let tryIdx = trackIdx; tryIdx < candidatesList.length; tryIdx++) {
-            const cand = candidatesList[tryIdx];
-            if (!cand) continue;
-            const q = cand.url || cand.title || cand;
-            try {
-              const ok = await musicPlayer.playNow(guild, voiceChannel, q, interaction.channel, cache.userId).catch(err => { console.error('playNow error', err); return false; });
-              if (ok) { played = true; break; }
-            } catch (e) { console.error('playNow threw', e); }
-          }
-          if (!played) {
-            // Update the in-channel control message with error if possible
-            try { await updateControlMessageWithError(guild.id, client, '❌ Не удалось воспроизвести выбранный трек и альтернативы.'); } catch (e) {}
-            try { await safeReply(interaction, { content: '❌ Не удалось воспроизвести выбранный трек и альтернативы.', ephemeral: true }); } catch (e) {}
-          }
-          delete global._musicSearchCache[searchId];
-          return;
-        } catch (e) {
-          console.error('music search button error', e);
-          await safeReply(interaction, { content: '❌ Ошибка при выборе трека.', ephemeral: true });
         }
         return;
       }

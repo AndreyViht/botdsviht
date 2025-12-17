@@ -1,10 +1,6 @@
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, entersState, VoiceConnectionStatus, AudioPlayerStatus } = require('@discordjs/voice');
-const { yt_search } = require('play-dl');
 const ytSearch = require('yt-search');
-const SoundCloud = require('soundcloud-scraper');
 const db = require('../libs/db');
-
-const client_sc = new SoundCloud.Client();
 
 class PlayerManager {
   constructor() {
@@ -17,13 +13,18 @@ class PlayerManager {
   async searchYouTube(query) {
     try {
       const results = await ytSearch(query);
+      if (!results.videos || results.videos.length === 0) {
+        console.warn('[PLAYER] No YouTube results for:', query);
+        return [];
+      }
+      
       return results.videos.slice(0, 5).map(v => ({
         source: 'youtube',
-        title: v.title,
+        title: v.title || 'Unknown',
         url: v.url,
-        duration: v.seconds,
-        thumbnail: v.image,
-        author: v.author.name
+        duration: v.seconds || 0,
+        thumbnail: v.image || null,
+        author: v.author?.name || 'Unknown'
       }));
     } catch (e) {
       console.error('[PLAYER] YouTube search error:', e.message);
@@ -32,28 +33,20 @@ class PlayerManager {
   }
 
   async searchSoundCloud(query) {
-    try {
-      const tracks = await client_sc.tracks.search({ q: query, limit: 5 });
-      return tracks.map(t => ({
-        source: 'soundcloud',
-        title: t.title,
-        url: t.permalink_url,
-        duration: Math.floor(t.duration / 1000),
-        thumbnail: t.artwork_url,
-        author: t.user.username
-      }));
-    } catch (e) {
-      console.error('[PLAYER] SoundCloud search error:', e.message);
-      return [];
-    }
+    // SoundCloud поиск отключен в этой версии
+    // Вернём пустой массив для совместимости
+    return [];
   }
 
   async search(query) {
-    const [ytResults, scResults] = await Promise.all([
-      this.searchYouTube(query),
-      this.searchSoundCloud(query)
-    ]);
-    return [...ytResults, ...scResults].slice(0, 8);
+    try {
+      console.log('[PLAYER] Searching for:', query);
+      const ytResults = await this.searchYouTube(query);
+      return ytResults.slice(0, 8);
+    } catch (e) {
+      console.error('[PLAYER] Search error:', e.message);
+      return [];
+    }
   }
 
   async getPlaybackLink(song) {

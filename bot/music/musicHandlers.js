@@ -72,22 +72,25 @@ module.exports = {
     if (!interaction.isModalSubmit()) return;
     if (interaction.customId !== 'music_search_modal') return;
 
-    await interaction.deferReply({ ephemeral: true });
-
     try {
       const query = interaction.fields.getTextInputValue('search_query');
+      
+      console.log('[MUSIC] Searching for:', query);
       const results = await playerManager.search(query);
 
       if (results.length === 0) {
-        await interaction.editReply('❌ Музыка не найдена');
+        await interaction.reply({
+          content: '❌ Музыка не найдена',
+          ephemeral: true
+        });
         return;
       }
 
       const options = results.slice(0, 5).map((song, i) => ({
         label: song.title.substring(0, 100),
-        description: `${song.author} (${song.duration}s)`,
+        description: `${song.author} (${song.duration}s)`.substring(0, 100),
         value: `song_${i}`,
-        emoji: song.source === 'youtube' ? '🔴' : '☁️'
+        emoji: '🔴'
       }));
 
       const row = new ActionRowBuilder()
@@ -111,11 +114,11 @@ module.exports = {
         try { db.delete(searchKey); } catch (e) {}
       }, 5 * 60 * 1000);
 
-      await interaction.editReply({
+      await interaction.reply({
         embeds: [
           new EmbedBuilder()
             .setTitle('🔍 Результаты поиска')
-            .setDescription(`Найдено ${results.length} композиций`)
+            .setDescription(`Найдено ${results.length} композиций\n\n**${query}**`)
             .setColor(0x1DB954)
         ],
         components: [row],
@@ -123,7 +126,10 @@ module.exports = {
       });
     } catch (e) {
       console.error('[MUSIC HANDLER] Search error:', e);
-      await interaction.editReply('❌ Ошибка при поиске');
+      await interaction.reply({
+        content: `❌ Ошибка при поиске: ${e.message}`,
+        ephemeral: true
+      }).catch(() => {});
     }
   },
 

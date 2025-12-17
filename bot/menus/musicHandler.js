@@ -138,22 +138,29 @@ module.exports = {
           return;
         }
 
-        // Отправляем команду Jockie Music
+        // Отправляем команду Jockie Music в чат
         const command = `m!play ${songName}`;
-        await interaction.channel.send(command);
+        const msg = await interaction.channel.send(command);
 
-        // Сохраняем в БД что музыка играет
-        await db.ensureReady();
-        let musicState = db.get('musicState') || {};
-        musicState.isPlaying = true;
-        musicState.lastChannel = interaction.channelId;
-        musicState.lastUser = interaction.user.id;
-        db.set('musicState', musicState);
+        // Показываем инструкцию
+        const embed = new EmbedBuilder()
+          .setTitle('▶️ Команда отправлена!')
+          .setDescription(`Команда:\n\`\`\`\n${command}\n\`\`\``)
+          .setColor(0x1DB954)
+          .addFields(
+            {
+              name: '⏳ Ожидание...',
+              value: 'Jockie Music обрабатывает запрос...\n\nЕсли ничего не происходит, убедись что:'
+            },
+            {
+              name: '✅ Проверь:',
+              value: '• Ты в голосовом канале\n• Jockie Music имеет права\n• Песня существует в базе'
+            }
+          )
+          .setFooter({ text: 'Если не сработает, Jockie выведет сообщение об ошибке' })
+          .setTimestamp();
 
-        await interaction.editReply({
-          content: `▶️ Запускаю: **${songName}**\n🎵 Spotify режим активирован!`,
-          ephemeral: true
-        });
+        await interaction.editReply({ embeds: [embed] });
       } catch (e) {
         console.error('Ошибка при запуске музыки:', e);
         await interaction.editReply({

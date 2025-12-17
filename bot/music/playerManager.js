@@ -94,6 +94,10 @@ class PlayerManager {
     this.queue.delete(guildId);
     this.nowPlaying.delete(guildId);
   }
+
+  getNowPlaying(guildId) {
+    return this.nowPlaying.get(guildId) || null;
+  }
 }
 
 module.exports = new PlayerManager();

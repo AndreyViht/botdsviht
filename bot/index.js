@@ -111,6 +111,14 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
     if (interaction.isButton()) {
+      // YouTube music player buttons
+      if (interaction.customId && interaction.customId.startsWith('music_')) {
+        try {
+          const { handleMusicButtons } = require('./music/musicHandlers');
+          await handleMusicButtons(interaction);
+          return;
+        } catch (e) { console.error('music button error', e); await safeReply(interaction, { content: 'Ошибка при обработке кнопки.', ephemeral: true }); }
+      }
       // Show support creation modal
       if (interaction.customId === 'support_create') {
         const modal = new ModalBuilder().setCustomId('support_modal').setTitle('Создать обращение');
@@ -647,6 +655,14 @@ client.on('interactionCreate', async (interaction) => {
           return;
         } catch (e) { console.error('music_modal_queue submit error', e); return await safeReply(interaction, { content: 'Ошибка при обработке формы музыки.', ephemeral: true }); }
       }
+      // New YouTube music search modal
+      if (interaction.customId === 'music_search_modal') {
+        try {
+          const { handleMusicSearchSubmit } = require('./music/musicHandlers');
+          await handleMusicSearchSubmit(interaction);
+          return;
+        } catch (e) { console.error('music_search_modal error', e); return await safeReply(interaction, { content: 'Ошибка поиска песни.', ephemeral: true }); }
+      }
       // Post Manager modals
       if (interaction.customId && (interaction.customId.startsWith('post_') || interaction.customId.startsWith('pm_'))) {
         try {
@@ -665,6 +681,14 @@ client.on('interactionCreate', async (interaction) => {
     }
     // Handle all select menus (including channel, string select, etc)
     if (interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu() || interaction.isUserSelectMenu()) {
+      // YouTube music search results select
+      if (interaction.customId === 'music_select') {
+        try {
+          const { handleMusicSelect } = require('./music/musicHandlers');
+          await handleMusicSelect(interaction);
+          return;
+        } catch (e) { console.error('music_select error', e); await safeReply(interaction, { content: 'Ошибка при выборе песни.', ephemeral: true }); }
+      }
       // Viht Moroz - module toggle
       if (interaction.customId === 'moroz_select') {
         try {

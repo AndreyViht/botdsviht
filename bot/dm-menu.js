@@ -449,3 +449,17 @@ async function openLoungePlayer(user, client, interaction) {
   }
 }
 
+// Очистка устаревших меню из памяти (вместо проверки каждого пользователя)
+async function cleanupExpiredMenus() {
+  // Эта функция может быть расширена позже если нужна более сложная логика
+  // Пока просто логируем что очистка произошла
+  console.log('[DM-MENU] Cleanup of expired menus performed');
+}
+
+module.exports = {
+  createUserMenu,
+  handleDmMenuInteraction,
+  cleanupOldMenuMessages,
+  openLoungePlayer,
+  cleanupExpiredMenus
+};

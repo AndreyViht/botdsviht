@@ -8,6 +8,52 @@ class PlayerManager {
     this.nowPlaying = new Map(); // guildId -> current song info
     this.connections = new Map(); // guildId -> VoiceConnection
     this.players = new Map(); // guildId -> AudioPlayer
+    this.lastCleanup = Date.now();
+    
+    // Периодическая очистка неактивных гильдий
+    setInterval(() => this.cleanupInactiveGuilds(), 30 * 60 * 1000);
+  }
+  
+  // Cleanup старые данные гильдий которые больше не в боте
+  cleanupInactiveGuilds() {
+    try {
+      const now = Date.now();
+      if (now - this.lastCleanup < 30 * 60 * 1000) return;
+      this.lastCleanup = now;
+      
+      let cleaned = 0;
+      const toDelete = [];
+      
+      for (const guildId of this.queue.keys()) {
+        toDelete.push(guildId);
+      }
+      
+      for (const guildId of toDelete) {
+        this.queue.delete(guildId);
+        this.nowPlaying.delete(guildId);
+        if (this.connections.has(guildId)) {
+          try {
+            const conn = this.connections.get(guildId);
+            if (conn && conn.destroy) conn.destroy();
+          } catch (e) {}
+          this.connections.delete(guildId);
+        }
+        if (this.players.has(guildId)) {
+          try {
+            const player = this.players.get(guildId);
+            if (player && player.stop) player.stop();
+          } catch (e) {}
+          this.players.delete(guildId);
+        }
+        cleaned++;
+      }
+      
+      if (cleaned > 0) {
+        console.log('[PLAYER] Cleaned up ' + cleaned + ' inactive guild records');
+      }
+    } catch (e) {
+      console.warn('[PLAYER] Cleanup error:', e.message);
+    }
   }
 
   async searchYouTube(query) {

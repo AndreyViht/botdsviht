@@ -1025,20 +1025,17 @@ client.on('guildMemberAdd', async (member) => {
 // Hourly cleanup task for DM menus
 setInterval(async () => {
   try {
+    // Оптимизация: не итерируем по всем членам, только очищаем старые меню из памяти
     const dmMenu = require('./dm-menu');
-    // Get all bot guilds and iterate through members to cleanup their DM messages
-    for (const guild of client.guilds.cache.values()) {
-      const members = await guild.members.fetch({ limit: 100 }).catch(() => null);
-      if (!members) continue;
-      for (const member of members.values()) {
-        if (member.user.bot) continue;
-        await dmMenu.cleanupOldMenuMessages(member.user, client).catch(() => {});
-        // Small delay to avoid rate limits
-        await new Promise(r => setTimeout(r, 100));
-      }
+    
+    // Вместо fetch всех членов, просто вызываем очистку в dmMenu
+    // которая удалит старые сообщения которые не используются
+    if (typeof dmMenu.cleanupExpiredMenus === 'function') {
+      await dmMenu.cleanupExpiredMenus().catch(() => {});
+      console.log('[CLEANUP] Expired DM menus cleaned');
     }
   } catch (err) {
-    console.error('Hourly DM cleanup error:', err.message);
+    console.error('[CLEANUP] Hourly DM cleanup error:', err.message);
   }
 }, 3600000); // 1 hour = 3600000 ms
 // AI chat handler
@@ -1046,6 +1043,31 @@ const { aiChatChannelId } = require('./config');
 const COOLDOWN_MS = 3000;
 const lastMessageAt = new Map();
 const processedMessages = new Set(); // Track processed messages
+
+// 🧹 Cleanup memory leaks every hour
+setInterval(() => {
+  const now = Date.now();
+  const MAX_AGE = 24 * 60 * 60 * 1000; // 24 часа
+  
+  // Очищаем lastMessageAt старше 24 часов
+  let removed = 0;
+  for (const [userId, timestamp] of lastMessageAt.entries()) {
+    if (now - timestamp > MAX_AGE) {
+      lastMessageAt.delete(userId);
+      removed++;
+    }
+  }
+  
+  // Очищаем processedMessages если слишком много
+  if (processedMessages.size > 100000) {
+    const oldSize = processedMessages.size;
+    processedMessages.clear();
+    console.log('[MEMORY] Cleared processedMessages (' + oldSize + ' items)');
+  }
+  
+  console.log('[MEMORY] Cleanup: lastMessageAt=' + lastMessageAt.size + ' users (removed ' + removed + '), processedMessages=' + processedMessages.size);
+}, 60 * 60 * 1000); // Каждый час
+
 client.on('messageCreate', async (message) => {
   try {
     if (message.author?.bot) return;

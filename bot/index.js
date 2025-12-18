@@ -1526,12 +1526,12 @@ client.once('ready', async () => {
       } catch (err) { console.warn('ensureAiPanel error', err && err.message ? err.message : err); }
     }
     await ensureAiPanel();
-    setInterval(async () => { try { await ensureAiPanel(); } catch (e) { } }, 5 * 60 * 1000);
+    // НЕ ставим отдельный интервал - будет в центральном ниже
   } catch (e) { console.warn('Failed to ensure AI panel on ready:', e && e.message ? e.message : e); }
   // Ensure main navigation menu in menu channel
   try {
     await ensureMenuPanel(client);
-    setInterval(async () => { try { await ensureMenuPanel(client); } catch (e) { /* ignore */ } }, 5 * 60 * 1000);
+    // НЕ ставим отдельный интервал - будет в центральном ниже
   } catch (e) { console.warn('Failed to ensure menu panel on ready:', e && e.message ? e.message : e); }
   // After control panel: post price / information panel
   try {
@@ -1563,13 +1563,7 @@ client.once('ready', async () => {
     console.log('[MUSIC] Initializing music panel...');
     await updateMusicPanel(client);
     console.log('[MUSIC] ✅ Music panel posted successfully');
-    setInterval(async () => { 
-      try { 
-        await updateMusicPanel(client); 
-      } catch (e) { 
-        console.error('[MUSIC] Error in periodic refresh:', e.message);
-      } 
-    }, 5 * 60 * 1000);
+    // НЕ ставим отдельный интервал - будет в центральном ниже
   } catch (e) { 
     console.error('[MUSIC] Failed to post music panel on ready:', e && e.message ? e.message : e);
     console.error('[MUSIC] Stack:', e?.stack);
@@ -1578,8 +1572,50 @@ client.once('ready', async () => {
   // Post Post Manager panel
   try {
     await postPostManagerPanel(client);
-    setInterval(async () => { try { await postPostManagerPanel(client); } catch (e) { /* ignore */ } }, 5 * 60 * 1000);
+    // НЕ ставим отдельный интервал - будет в центральном ниже
   } catch (e) { console.warn('Failed to post manager panel on ready:', e && e.message ? e.message : e); }
+
+  // ===== ЦЕНТРАЛЬНЫЙ ИНТЕРВАЛ - обновляет ВСЕ панели один раз каждые 5 минут =====
+  setInterval(async () => {
+    try {
+      await ensureAiPanel().catch(e => console.warn('[PANEL] AI error:', e.message));
+      await ensureMenuPanel(client).catch(e => console.warn('[PANEL] Menu error:', e.message));
+      const { updateMusicPanel } = require('./music/musicHandlers');
+      await updateMusicPanel(client).catch(e => console.warn('[PANEL] Music error:', e.message));
+      await postPostManagerPanel(client).catch(e => console.warn('[PANEL] Manager error:', e.message));
+      
+      // Проверяем что бот всё ещё в войсе отзывов
+      try {
+        const { joinVoiceChannel, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
+        const DEFAULT_VOICE_CHANNEL_ID = '1449757724274589829';
+        const DEFAULT_GUILD_ID = '1428051812103094282';
+        
+        const guild = await client.guilds.fetch(DEFAULT_GUILD_ID).catch(() => null);
+        if (guild) {
+          const botVoiceState = guild.members.me?.voice;
+          if (!botVoiceState?.channel || botVoiceState.channel.id !== DEFAULT_VOICE_CHANNEL_ID) {
+            console.log('[VOICE] Bot disconnected, reconnecting...');
+            const voiceChannel = await guild.channels.fetch(DEFAULT_VOICE_CHANNEL_ID).catch(() => null);
+            if (voiceChannel?.isVoiceBased?.()) {
+              const connection = joinVoiceChannel({
+                channelId: DEFAULT_VOICE_CHANNEL_ID,
+                guildId: guild.id,
+                adapterCreator: guild.voiceAdapterCreator,
+                selfDeaf: false,
+                selfMute: false
+              });
+              await entersState(connection, VoiceConnectionStatus.Ready, 15_000).catch(() => {});
+              console.log('[VOICE] ✅ Bot reconnected to default voice channel');
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[VOICE] Reconnect check failed:', e.message);
+      }
+    } catch (e) {
+      console.error('[PANEL] Central refresh error:', e.message);
+    }
+  }, 5 * 60 * 1000);
 });
 // Global safety handlers to avoid process crash on uncaught errors
 process.on('unhandledRejection', (reason, p) => {

@@ -111,6 +111,88 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
     if (interaction.isButton()) {
+      // Snowball reply button
+      if (interaction.customId && interaction.customId.startsWith('snowball_reply_')) {
+        try {
+          const parts = interaction.customId.split('_');
+          const targetId = parts[2];
+          const attackerId = parts[3];
+          const clickerId = interaction.user.id;
+
+          // Проверка - нажимает ли правильный пользователь
+          if (clickerId !== targetId) {
+            return await safeReply(interaction, { 
+              content: `❌ Только <@${targetId}> может ответить на снежок от <@${attackerId}>!`, 
+              ephemeral: true 
+            });
+          }
+
+          // Выполняем ответ (простой снежок с бонусом)
+          const pointSystem = require('./libs/pointSystem');
+          const EmbedBuilder = require('discord.js').EmbedBuilder;
+          
+          const damage = Math.floor(Math.random() * 30) + 10;
+          const hit = Math.random() < 0.7;
+          const pointsReward = hit ? Math.floor(damage / 2) : 5;
+
+          // Обновляем статистику
+          const db = require('./libs/db');
+          await db.ensureReady();
+          const snowballStats = db.get('snowballStats') || {};
+          const targetStats = snowballStats[targetId] || { hits: 0, misses: 0, totalDamage: 0 };
+          if (hit) {
+            targetStats.hits += 1;
+            targetStats.totalDamage += damage;
+          } else {
+            targetStats.misses += 1;
+          }
+          snowballStats[targetId] = targetStats;
+          await db.set('snowballStats', snowballStats);
+
+          // Добавляем поинты
+          await pointSystem.addPoints(targetId, pointsReward);
+          if (hit) {
+            await pointSystem.addPoints(attackerId, -Math.floor(damage / 2));
+          }
+
+          // Embed ответного удара
+          const embed = new EmbedBuilder()
+            .setColor(hit ? '#0099FF' : '#FF6B6B')
+            .setTitle(`❄️ ОТВЕТНЫЙ УДАР!`)
+            .setDescription(`<@${targetId}> ответил снежком на <@${attackerId}>!\n\n${hit ? `⚡ Попадание! Урон: ${damage}` : '❌ Промах!'}`)
+            .addFields(
+              { name: '💰 Награда', value: `+${pointsReward} очков`, inline: true },
+              { name: '📊 Ваша статистика', value: `Попаданий: ${targetStats.hits}\nПромахов: ${targetStats.misses}`, inline: true }
+            )
+            .setThumbnail(interaction.user.displayAvatarURL())
+            .setFooter({ text: 'Снежная война продолжается!' });
+
+          await safeReply(interaction, { embeds: [embed] });
+
+          // Объявление крита в game канал
+          if (damage > 25 && hit) {
+            try {
+              const channelId = '1450486721878954006';
+              const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+              if (channel) {
+                const announce = new EmbedBuilder()
+                  .setColor('#FFD700')
+                  .setTitle('🎯 ОТВЕТНЫЙ КРИТ!')
+                  .setDescription(`<@${targetId}> нанёс **${damage}** урона в ответ <@${attackerId}>!`)
+                  .setThumbnail(interaction.user.displayAvatarURL());
+                await channel.send({ embeds: [announce] });
+              }
+            } catch (e) {
+              // Игнорируем
+            }
+          }
+        } catch (e) {
+          console.error('snowball reply error', e);
+          await safeReply(interaction, { content: '❌ Ошибка при ответе снежком.', ephemeral: true });
+        }
+        return;
+      }
+
       // YouTube music player buttons
       if (interaction.customId && interaction.customId.startsWith('music_')) {
         try {

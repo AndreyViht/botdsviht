@@ -1,0 +1,48 @@
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('оглушить')
+    .setDescription('💫 Оглушить участника')
+    .addUserOption(option =>
+      option
+        .setName('участник')
+        .setDescription('Кого оглушить?')
+        .setRequired(true)
+    ),
+
+  async execute(interaction) {
+    const RP_CHANNEL_ID = '1452769544484683959';
+    
+    if (interaction.channelId !== RP_CHANNEL_ID) {
+      return await interaction.reply({
+        content: '❌ РП команды доступны только в <#1452769544484683959>',
+        ephemeral: true
+      });
+    }
+    
+    const target = interaction.options.getUser('участник');
+    
+    if (target.id === interaction.user.id) {
+      return await interaction.reply({
+        content: '❌ Ты не можешь оглушить сам себя!',
+        ephemeral: true
+      });
+    }
+
+    if (target.bot) {
+      return await interaction.reply({
+        content: '❌ Нельзя оглушать ботов!',
+        ephemeral: true
+      });
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor('#FFEB3B')
+      .setTitle('💫 Оглушение!')
+      .setDescription(`${interaction.user} **оглушил** ${target}`)
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed] });
+  }
+};

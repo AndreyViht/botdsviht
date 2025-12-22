@@ -142,7 +142,7 @@ module.exports = {
           .setStyle(ButtonStyle.Primary)
       );
 
-    await interaction.reply({ embeds: [embed], components: [row] });
+    await interaction.reply({ content: `${target.toString()}`, embeds: [embed], components: [row] });
 
     // Объявление в game канал если крит
     if (damage > 25) {

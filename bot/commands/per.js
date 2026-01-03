@@ -11,6 +11,12 @@ module.exports = {
     const target = interaction.options.getUser('user');
     const text = interaction.options.getString('text');
 
+    const allowedRoles = ['1436485697392607303', '1436486253066326067'];
+    const hasRole = allowedRoles.some(roleId => interaction.member.roles.cache.has(roleId));
+    if (!hasRole) {
+      return interaction.reply({ content: 'У вас нет прав на использование этой команды.', ephemeral: true });
+    }
+
     if (!target) return interaction.reply({ content: 'Пользователь не найден.', ephemeral: true });
     if (!text || !text.trim()) return interaction.reply({ content: 'Текст обязателен.', ephemeral: true });
 

@@ -11,7 +11,6 @@ async function createControlPanel(guildId, client) {
 
     const nowPlaying = playerManager.nowPlaying.get(guildId);
     const queue = playerManager.getQueue(guildId);
-    const owner = playerManager.owners.get(guildId);
     const isPlaying = playerManager.players.has(guildId);
 
     let description = 'Музыкальный плеер\n\n';
@@ -41,7 +40,7 @@ async function createControlPanel(guildId, client) {
       .setTitle('🎵 Управление музыкой')
       .setDescription(description)
       .setColor(isPlaying ? 0x1DB954 : 0x5865F2)
-      .setFooter({ text: owner ? `Сессия: <@${owner}>` : 'Нет активной сессии' })
+      .setFooter({ text: 'Музыкальный плеер' })
       .setTimestamp();
 
     const row1 = new ActionRowBuilder().addComponents(
@@ -49,8 +48,7 @@ async function createControlPanel(guildId, client) {
         .setCustomId('music_search')
         .setLabel('Поиск')
         .setEmoji('🔍')
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(!owner),
+        .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId('music_skip')
         .setLabel('Пропустить')
@@ -194,12 +192,6 @@ async function handleMusicSelect(interaction) {
 
 async function handleMusicButtons(interaction) {
   const { customId, guildId, user } = interaction;
-
-  // Check if user is the session owner
-  if (!playerManager.checkOwner(guildId, user.id)) {
-    await interaction.reply({ content: '❌ Только владелец сессии может управлять музыкой!', ephemeral: true });
-    return;
-  }
 
   if (customId === 'music_search') {
     handleMusicSearch(interaction);

@@ -1,35 +1,47 @@
-﻿const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const playerManager = require('./playerManager');
 const db = require('../libs/db');
 
 const MUSIC_PANEL_CHANNEL = '1443194196172476636';
 
-async function updateMusicPanel(client) {
+async function createControlPanel(guildId, client) {
   try {
-    console.log('[MUSIC] updateMusicPanel called');
-    const channel = await client.channels.fetch(MUSIC_PANEL_CHANNEL).catch((e) => {
-      console.error('[MUSIC] Failed to fetch channel:', e.message);
-      return null;
-    });
-    
-    if (!channel) {
-      console.error('[MUSIC] Channel not found or not accessible:', MUSIC_PANEL_CHANNEL);
-      return;
+    const channel = await client.channels.fetch(MUSIC_PANEL_CHANNEL).catch(() => null);
+    if (!channel) return null;
+
+    const nowPlaying = playerManager.nowPlaying.get(guildId);
+    const queue = playerManager.getQueue(guildId);
+    const owner = playerManager.owners.get(guildId);
+    const isPlaying = playerManager.players.has(guildId);
+
+    let description = 'Музыкальный плеер\n\n';
+    if (nowPlaying) {
+      description += `**Сейчас играет:** ${nowPlaying.title}\n`;
+      description += `**Длительность:** ${nowPlaying.duration}s\n`;
+      description += `**Запросил:** <@${nowPlaying.requesterId}>\n\n`;
+    } else {
+      description += 'Ничего не играет\n\n';
     }
-    
-    console.log('[MUSIC] Channel fetched:', channel.name || channel.id);
+
+    if (queue.length > 0) {
+      description += `**Очередь:** ${queue.length} треков\n`;
+      if (queue.length <= 5) {
+        queue.forEach((song, i) => {
+          description += `${i + 1}. ${song.title} - <@${song.requesterId}>\n`;
+        });
+      } else {
+        for (let i = 0; i < 5; i++) {
+          description += `${i + 1}. ${queue[i].title} - <@${queue[i].requesterId}>\n`;
+        }
+        description += `... и ещё ${queue.length - 5} треков`;
+      }
+    }
 
     const embed = new EmbedBuilder()
-      .setTitle('🎵 Музыкальный плеер')
-      .setDescription('YouTube поиск')
-      .setColor(0x1DB954)
-      .addFields(
-        { name: '🔍 Поиск', value: 'Найти и включить песню', inline: true },
-        { name: '⏭️ Следующая', value: 'Пропустить текущий трек', inline: true },
-        { name: '⏹️ Стоп', value: 'Остановить плеер', inline: true },
-        { name: '📋 Очередь', value: 'Показать список', inline: true }
-      )
-      .setFooter({ text: 'Управление музыкой' })
+      .setTitle('🎵 Управление музыкой')
+      .setDescription(description)
+      .setColor(isPlaying ? 0x1DB954 : 0x5865F2)
+      .setFooter({ text: owner ? `Сессия: <@${owner}>` : 'Нет активной сессии' })
       .setTimestamp();
 
     const row1 = new ActionRowBuilder().addComponents(
@@ -37,56 +49,61 @@ async function updateMusicPanel(client) {
         .setCustomId('music_search')
         .setLabel('Поиск')
         .setEmoji('🔍')
-        .setStyle(ButtonStyle.Primary),
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(!owner),
       new ButtonBuilder()
         .setCustomId('music_skip')
-        .setLabel('Следующая')
+        .setLabel('Пропустить')
         .setEmoji('⏭️')
-        .setStyle(ButtonStyle.Primary),
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(!isPlaying),
       new ButtonBuilder()
         .setCustomId('music_stop')
         .setLabel('Стоп')
         .setEmoji('⏹️')
         .setStyle(ButtonStyle.Danger)
+        .setDisabled(!isPlaying)
     );
 
     const row2 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('music_pause')
+        .setLabel(isPlaying ? 'Пауза' : 'Возобновить')
+        .setEmoji(isPlaying ? '⏸️' : '▶️')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(!isPlaying),
       new ButtonBuilder()
         .setCustomId('music_queue')
         .setLabel('Очередь')
         .setEmoji('📋')
         .setStyle(ButtonStyle.Secondary)
+        .setDisabled(queue.length === 0)
     );
 
-    await db.ensureReady();
-    const panelRecord = db.get('musicPanel');
-    
-    console.log('[MUSIC] Panel record from DB:', panelRecord ? `Found messageId: ${panelRecord.messageId}` : 'Not found');
-
-    if (panelRecord?.messageId) {
+    const existingPanel = playerManager.getPanel(guildId);
+    if (existingPanel) {
       try {
-        console.log('[MUSIC] Trying to fetch existing message:', panelRecord.messageId);
-        const msg = await channel.messages.fetch(panelRecord.messageId);
-        console.log('[MUSIC] Existing message found, editing...');
-        await msg.edit({ embeds: [embed], components: [row1, row2] });
-        console.log('[MUSIC] ✅ Panel updated successfully');
-        return;
-      } catch (e) { 
-        console.warn('[MUSIC] Failed to fetch/edit existing message:', e.message);
+        const message = await channel.messages.fetch(existingPanel.messageId).catch(() => null);
+        if (message) {
+          await message.edit({ embeds: [embed], components: [row1, row2] });
+          return message;
+        }
+      } catch (e) {
+        console.warn('[MUSIC] Failed to edit existing panel:', e.message);
       }
     }
 
-    console.log('[MUSIC] Creating new panel message...');
-    const msg = await channel.send({ embeds: [embed], components: [row1, row2] });
-    db.set('musicPanel', { messageId: msg.id, channelId: MUSIC_PANEL_CHANNEL });
-    console.log('[MUSIC] ✅ Panel posted successfully, messageId:', msg.id);
+    // Create new panel
+    const message = await channel.send({ embeds: [embed], components: [row1, row2] });
+    playerManager.setPanel(guildId, channel.id, message.id);
+    return message;
   } catch (e) {
-    console.error('[MUSIC] Failed to update panel:', e.message);
-    console.error('[MUSIC] Stack:', e?.stack);
+    console.error('[MUSIC] createControlPanel error:', e.message);
+    return null;
   }
 }
 
-function handleMusicSearch(interaction) {
+async function handleMusicSearch(interaction) {
   const modal = new ModalBuilder()
     .setCustomId('music_search_modal')
     .setTitle('Поиск песни');
@@ -105,7 +122,7 @@ async function handleMusicSearchSubmit(interaction) {
   const query = interaction.fields.getTextInputValue('song_query');
   
   if (!query.trim()) {
-    interaction.reply({ content: ' Введите название песни', ephemeral: true });
+    interaction.reply({ content: 'Введите название песни', ephemeral: true });
     return;
   }
 
@@ -122,7 +139,7 @@ async function handleMusicSearchSubmit(interaction) {
     const select = new StringSelectMenuBuilder()
       .setCustomId('music_select')
       .setPlaceholder('Выберите песню')
-      .addOptions(results.slice(0, 25).map((song, i) => ({
+      .addOptions(results.slice(0, 8).map((song, i) => ({
         label: `${i + 1}. ${song.title.substring(0, 80)}`,
         value: String(i),
         description: (song.author || song.channel || 'YouTube').substring(0, 100)
@@ -162,20 +179,27 @@ async function handleMusicSelect(interaction) {
     return;
   }
 
-  playerManager.addToQueue(interaction.guildId, song);
+  // передаём voiceChannel и client, чтобы плеер мог присоединиться и начать воспроизведение
+  await playerManager.addToQueue(interaction.guildId, song, voiceChannel, interaction.client, interaction.user.id);
   
   await interaction.deferReply({ ephemeral: true });
   interaction.editReply(`✅ **${song.title}** добавлено в очередь`);
 
   try {
-    await updateMusicPanel(interaction.client);
+    await createControlPanel(interaction.guildId, interaction.client);
   } catch (e) {
     console.error('[MUSIC] Panel update error:', e);
   }
 }
 
 async function handleMusicButtons(interaction) {
-  const { customId } = interaction;
+  const { customId, guildId, user } = interaction;
+
+  // Check if user is the session owner
+  if (!playerManager.checkOwner(guildId, user.id)) {
+    await interaction.reply({ content: '❌ Только владелец сессии может управлять музыкой!', ephemeral: true });
+    return;
+  }
 
   if (customId === 'music_search') {
     handleMusicSearch(interaction);
@@ -183,26 +207,37 @@ async function handleMusicButtons(interaction) {
   }
 
   if (customId === 'music_skip') {
-    playerManager.skip(interaction.guildId);
+    playerManager.skip(guildId);
     await interaction.deferReply({ ephemeral: true });
-    interaction.editReply(' Трек пропущен');
+    interaction.editReply('✅ Трек пропущен');
+    // Update panel
+    setTimeout(() => createControlPanel(guildId, interaction.client), 1000);
     return;
   }
 
   if (customId === 'music_stop') {
-    playerManager.stop(interaction.guildId);
+    const TARGET_CHANNEL = '1449757724274589829';
+    await playerManager.stop(guildId, interaction.client, { moveTo: TARGET_CHANNEL });
     await interaction.deferReply({ ephemeral: true });
-    interaction.editReply(' Плеер остановлен');
+    interaction.editReply('⏹️ Плеер остановлен, бот перемещён');
+    // Update panel
+    setTimeout(() => createControlPanel(guildId, interaction.client), 1000);
+    return;
+  }
+
+  if (customId === 'music_pause') {
+    // TODO: Implement pause/resume if needed
+    await interaction.reply({ content: '⏸️ Пауза/возобновление пока не реализовано', ephemeral: true });
     return;
   }
 
   if (customId === 'music_queue') {
-    const queue = playerManager.getQueue(interaction.guildId);
-    const nowPlaying = playerManager.getNowPlaying(interaction.guildId);
+    const queue = playerManager.getQueue(guildId);
+    const nowPlaying = playerManager.nowPlaying.get(guildId);
 
     let description = '';
     if (nowPlaying) {
-      description += ` **Сейчас:** ${nowPlaying.title}\n\n`;
+      description += `**Сейчас:** ${nowPlaying.title}\n\n`;
     }
 
     if (queue.length === 0) {
@@ -213,12 +248,23 @@ async function handleMusicButtons(interaction) {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(' Очередь')
+      .setTitle('📋 Очередь')
       .setDescription(description)
       .setColor(0x1DB954);
 
     interaction.reply({ embeds: [embed], ephemeral: true });
     return;
+  }
+}
+
+async function updateMusicPanel(client) {
+  // Update panels for all guilds with active sessions
+  for (const guildId of playerManager.owners.keys()) {
+    try {
+      await createControlPanel(guildId, client);
+    } catch (e) {
+      console.warn(`[MUSIC] Failed to update panel for guild ${guildId}:`, e.message);
+    }
   }
 }
 

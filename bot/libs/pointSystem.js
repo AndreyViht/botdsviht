@@ -89,6 +89,26 @@ async function addPoints(userId, points, reason = 'unknown') {
 }
 
 /**
+ * Получить очки игрока
+ */
+async function getPoints(userId) {
+  try {
+    await db.ensureReady();
+    
+    const gameStats = db.get('gameStats') || {};
+    if (!gameStats[userId]) {
+      return 0;
+    }
+    
+    return gameStats[userId].points || 0;
+    
+  } catch (e) {
+    console.error('[POINTS] Error getting points:', e);
+    return 0;
+  }
+}
+
+/**
  * Получить уровень по очкам
  */
 function getLevel(points) {
@@ -367,6 +387,7 @@ module.exports = {
   
   // Функции очков
   addPoints,
+  getPoints,
   getLevel,
   getLevelProgress,
   recordGameWin,

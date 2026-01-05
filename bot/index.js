@@ -1,17 +1,16 @@
 const fs = require('fs');
 const path = require('path');
-const { Client, Collection, GatewayIntentBits, Partials, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ChannelType } = require('discord.js');
+const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
 const { token } = require('./config');
 const db = require('./libs/db');
 const achievements = require('./libs/achievements');
 
-// Ensure ffmpeg binary is available to downstream modules (ffmpeg-static provides a binary)
+// Ensure ffmpeg binary is available
 try {
   const ffpath = require('ffmpeg-static');
   if (ffpath) {
     process.env.FFMPEG_PATH = ffpath;
     process.env.FFMPEG = ffpath;
-    // add containing dir to PATH so native spawn('ffmpeg') can find it
     const ffdir = path.dirname(ffpath);
     if (process.env.PATH && !process.env.PATH.includes(ffdir)) process.env.PATH = `${process.env.PATH}${path.delimiter}${ffdir}`;
     console.log('ffmpeg-static found and PATH updated');
@@ -19,12 +18,13 @@ try {
 } catch (e) {
   console.warn('ffmpeg-static not available; ensure ffmpeg is installed in PATH for audio playback');
 }
+
 if (!token) {
   console.error('DISCORD_TOKEN not set in env — set it in .env before starting the bot. Exiting.');
   process.exit(1);
 }
+
 // Intents
-// Include GuildVoiceStates so the bot can read which voice channel a member is in
 const intentsList = [
   GatewayIntentBits.Guilds,
   GatewayIntentBits.GuildMessages,
@@ -34,801 +34,72 @@ const intentsList = [
 const { messageContentIntent, guildMembersIntent } = require('./config');
 if (messageContentIntent) intentsList.push(GatewayIntentBits.MessageContent);
 if (guildMembersIntent) intentsList.push(GatewayIntentBits.GuildMembers);
-const client = new Client({ intents: intentsList, partials: [Partials.Message, Partials.Channel, Partials.Reaction] });
-// Global error handlers to capture runtime issues
+
+const client = new Client({
+  intents: intentsList,
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
+});
+
+// Global error handlers
 process.on('unhandledRejection', (reason, p) => {
   console.error('Unhandled Rejection at:', p, 'reason:', reason && reason.stack ? reason.stack : reason);
 });
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err && err.stack ? err.stack : err);
 });
-// Use centralized interaction helpers
-const { safeReply, safeUpdate, safeShowModal } = require('./libs/interactionUtils');
-// load commands
+
+// Load commands
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
   const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js') && f !== 'register-commands.js');
   for (const file of commandFiles) {
-    try { const command = require(path.join(commandsPath, file)); if (command.data && command.execute) client.commands.set(command.data.name, command); } catch (e) { console.warn('Failed loading command', file, e && e.message ? e.message : e); }
+    try {
+      const command = require(path.join(commandsPath, file));
+      if (command.data && command.execute) client.commands.set(command.data.name, command);
+    } catch (e) {
+      console.warn('Failed loading command', file, e && e.message ? e.message : e);
+    }
   }
 }
-// db already required above
-const { sendPrompt } = require('./ai/vihtAi');
-const { handlePriceButton } = require('./price/priceHandler');
-const { handleAiButton, createAiPanelEmbed, makeButtons: makeAiButtons } = require('./ai/aiHandler');
-const { ensureMenuPanel, handleMenuButton } = require('./menus/menuHandler');
-const { postPostManagerPanel, handlePostManagerButton, handlePostManagerSelect, handlePostManagerModal } = require('./post-manager/postManager');
-// optional helpers
-let handleReactionAdd = null;
-let handleReactionRemove = null;
-try {
-  const roleHandlers = require('./roles/reactionRole');
-  handleReactionAdd = roleHandlers.handleReactionAdd;
-  handleReactionRemove = roleHandlers.handleReactionRemove;
-} catch (e) { /* optional */ }
-try { const { initAutomod } = require('./moderation/automod'); initAutomod(client); } catch (e) { /* ignore */ }
-// Interaction handler: commands, buttons, modals
-// Channel IDs for themed logs (defined early so handlers can use them)
-const COMMAND_LOG_CHANNEL = '1446801265219604530';     // Логи команд
-const VOICE_LOG_CHANNEL = '1446801072344662149';       // Логи голоса: вход/выход/кик
-const SUPPORT_CHANNEL_ID = '1446801072344662149';      // Канал поддержки
-const STATUS_CHANNEL_ID = '1445848232965181500';       // Статус плеера
-const NICK_CHANGE_LOG_CHANNEL = '1446800866630963233'; // Логи изменения ников
-const MODERATION_LOG_CHANNEL = '1446798710511243354';  // Логи модерации (бан, вар, мут)
-const MESSAGE_EDIT_LOG_CHANNEL = '1446796850471505973';// Логи редактирования сообщений
-const BADWORD_LOG_CHANNEL = '1446796960697679953';     // Логи матерных слов
-const MUSIC_LOG_CHANNEL = '1445848232965181500';       // Логи музыки
 
-client.on('interactionCreate', async (interaction) => {
-  try {
-    // attach helpers to interaction for commands to use if desired
-    try { interaction.safeReply = (opts) => safeReply(interaction, opts); interaction.safeUpdate = (opts) => safeUpdate(interaction, opts); interaction.safeShowModal = (modal) => safeShowModal(interaction, modal); } catch (e) {}
-    if (interaction.isCommand()) {
-      const command = client.commands.get(interaction.commandName);
-      if (!command) return;
-      
-      // Log command to configured command log channel
-      try {
-        const logChannelId = COMMAND_LOG_CHANNEL;
-        const logChannel = interaction.client.channels.cache.get(logChannelId);
-        if (logChannel && logChannel.isTextBased && logChannel.isTextBased()) {
-          const user = interaction.user;
-          const commandName = interaction.commandName;
-          await logChannel.send(`${user.toString()} использовал команду /${commandName}`).catch(() => null);
-        }
-      } catch (logErr) {
-        console.error('Failed to log command:', logErr && logErr.message ? logErr.message : logErr);
-      }
-      
-      try {
-        try {
-          const pointSystem = require('./libs/pointSystem');
-          await pointSystem.checkFirstCommand(interaction.user.id, interaction.client);
-        } catch (e) { console.warn('[ACH] checkFirstCommand error:', e.message); }
-        await command.execute(interaction);
-      } catch (err) { console.error('Command error', err); await safeReply(interaction, { content: 'Ошибка при выполнении команды.', ephemeral: true }); }
-      return;
-    }
-    if (interaction.isButton()) {
-      // Snowball reply button
-      if (interaction.customId && interaction.customId.startsWith('snowball_reply_')) {
-        try {
-          const parts = interaction.customId.split('_');
-          const targetId = parts[2];
-          const attackerId = parts[3];
-          const clickerId = interaction.user.id;
-
-          // Проверка - нажимает ли правильный пользователь
-          if (clickerId !== targetId) {
-            return await safeReply(interaction, { 
-              content: `❌ Только <@${targetId}> может ответить на снежок от <@${attackerId}>!`, 
-              ephemeral: true 
-            });
-          }
-
-          // Выполняем ответ (простой снежок с бонусом)
-          const pointSystem = require('./libs/pointSystem');
-          const EmbedBuilder = require('discord.js').EmbedBuilder;
-          
-          const damage = Math.floor(Math.random() * 30) + 10;
-          const hit = Math.random() < 0.7;
-          const pointsReward = hit ? Math.floor(damage / 2) : 5;
-
-          // Обновляем статистику
-          const db = require('./libs/db');
-          await db.ensureReady();
-          const snowballStats = db.get('snowballStats') || {};
-          const targetStats = snowballStats[targetId] || { hits: 0, misses: 0, totalDamage: 0 };
-          if (hit) {
-            targetStats.hits += 1;
-            targetStats.totalDamage += damage;
-          } else {
-            targetStats.misses += 1;
-          }
-          snowballStats[targetId] = targetStats;
-          await db.set('snowballStats', snowballStats);
-
-          // Добавляем поинты
-          await pointSystem.addPoints(targetId, pointsReward);
-          if (hit) {
-            await pointSystem.addPoints(attackerId, -Math.floor(damage / 2));
-          }
-
-          // Embed ответного удара
-          const embed = new EmbedBuilder()
-            .setColor(hit ? '#0099FF' : '#FF6B6B')
-            .setTitle(`❄️ ОТВЕТНЫЙ УДАР!`)
-            .setDescription(`<@${targetId}> ответил снежком на <@${attackerId}>!\n\n${hit ? `⚡ Попадание! Урон: ${damage}` : '❌ Промах!'}`)
-            .addFields(
-              { name: '💰 Награда', value: `+${pointsReward} очков`, inline: true },
-              { name: '📊 Ваша статистика', value: `Попаданий: ${targetStats.hits}\nПромахов: ${targetStats.misses}`, inline: true }
-            )
-            .setThumbnail(interaction.user.displayAvatarURL())
-            .setFooter({ text: 'Снежная война продолжается!' });
-
-          await safeReply(interaction, { embeds: [embed] });
-
-          // Объявление крита в game канал
-          if (damage > 25 && hit) {
-            try {
-              const channelId = '1450486721878954006';
-              const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
-              if (channel) {
-                const announce = new EmbedBuilder()
-                  .setColor('#FFD700')
-                  .setTitle('🎯 ОТВЕТНЫЙ КРИТ!')
-                  .setDescription(`<@${targetId}> нанёс **${damage}** урона в ответ <@${attackerId}>!`)
-                  .setThumbnail(interaction.user.displayAvatarURL());
-                await channel.send({ embeds: [announce] });
-              }
-            } catch (e) {
-              // Игнорируем
-            }
-          }
-        } catch (e) {
-          console.error('snowball reply error', e);
-          await safeReply(interaction, { content: '❌ Ошибка при ответе снежком.', ephemeral: true });
-        }
-        return;
-      }
-
-      // YouTube music player buttons
-      if (interaction.customId && interaction.customId.startsWith('music_')) {
-        try {
-          const { handleMusicButtons } = require('./music/musicHandlers');
-          await handleMusicButtons(interaction);
-          return;
-        } catch (e) { console.error('music button error', e); await safeReply(interaction, { content: 'Ошибка при обработке кнопки.', ephemeral: true }); }
-      }
-      // Show support creation modal
-      if (interaction.customId === 'support_create') {
-        const modal = new ModalBuilder().setCustomId('support_modal').setTitle('Создать обращение');
-        const subj = new TextInputBuilder().setCustomId('subject').setLabel('Тема').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(60);
-        const msg = new TextInputBuilder().setCustomId('message').setLabel('Текст обращения').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000);
-        modal.addComponents(new ActionRowBuilder().addComponents(subj), new ActionRowBuilder().addComponents(msg));
-        try { await safeShowModal(interaction, modal); } catch (e) { console.error('showModal failed', e); await safeReply(interaction, { content: 'Не удалось открыть форму.', ephemeral: true }); }
-        return;
-      }
-          // removed accidental command execution in button handler
-      if (interaction.customId === 'support_close_all') {
-        const cfgRoles = require('./config');
-        const STAFF_ROLES = (cfgRoles.adminRoles && cfgRoles.adminRoles.length > 0) ? cfgRoles.adminRoles : ['1436485697392607303','1436486253066326067'];
-        const member = interaction.member; const isStaff = member && member.roles && member.roles.cache && STAFF_ROLES.some(r => member.roles.cache.has(r));
-        if (!isStaff) { await safeReply(interaction, { content: 'У вас нет прав для этой операции.', ephemeral: true }); return; }
-        const confirmRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('confirm_close_all').setLabel('Да, закрыть все').setStyle(ButtonStyle.Danger),
-          new ButtonBuilder().setCustomId('cancel_close_all').setLabel('Отмена').setStyle(ButtonStyle.Secondary)
-        );
-        await safeReply(interaction, { content: 'Вы уверены? Это закроет все открытые обращения.', components: [confirmRow], ephemeral: true });
-        return;
-      }
-      // confirm / cancel
-      if (interaction.customId === 'confirm_close_all' || interaction.customId === 'cancel_close_all') {
-        const cfgRoles = require('./config');
-        const STAFF_ROLES = (cfgRoles.adminRoles && cfgRoles.adminRoles.length > 0) ? cfgRoles.adminRoles : ['1436485697392607303','1436486253066326067'];
-        const member = interaction.member; const isStaff = member && member.roles && member.roles.cache && STAFF_ROLES.some(r => member.roles.cache.has(r));
-        if (!isStaff) { await safeReply(interaction, { content: 'У вас нет прав для этой операции.', ephemeral: true }); return; }
-        if (interaction.customId === 'cancel_close_all') { await safeUpdate(interaction, { content: 'Операция отменена.', components: [] }); return; }
-        try { await interaction.deferReply({ flags: 64 }); } catch (e) { /* ignore */ }
-        const tickets = db.get && db.get('tickets') ? db.get('tickets') : [];
-        let closedCount = 0;
-        for (const t of tickets) {
-          if (!t || t.status === 'closed') continue;
-          try {
-            const ch = await client.channels.fetch(t.threadId).catch(() => null);
-            if (ch) {
-              try { if (typeof ch.send === 'function') await ch.send('Обращение закрыто администратором.'); } catch (e) {}
-              try { if (!ch.archived) { if (typeof ch.setLocked === 'function') await ch.setLocked(true); await ch.setArchived(true); } } catch (e) {}
-            }
-          } catch (e) {}
-          t.status = 'closed'; t.closedAt = new Date().toISOString(); closedCount += 1;
-        }
-        await db.set('tickets', tickets);
-        await safeReply(interaction, { content: `Готово — закрыто обращений: ${closedCount}`, ephemeral: true });
-      }
-      // Infopol buttons (очистка данных пользователя)
-      if (interaction.customId && interaction.customId.startsWith('infopol_clear_')) {
-        try {
-          const userId = interaction.customId.split('_')[2];
-          const config = require('./config');
-          const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-          const isAdmin = member && member.roles && config.adminRoles && config.adminRoles.some(rid => member.roles.cache.has(rid));
-          if (!isAdmin) return await safeReply(interaction, { content: 'У вас нет прав для этой операции.', ephemeral: true });
-
-          const userViolations = db.get('userViolations') || {};
-          const userMutes = db.get('userMutes') || {};
-          const userBans = db.get('userBans') || {};
-
-          delete userViolations[userId];
-          delete userMutes[userId];
-          delete userBans[userId];
-
-          await db.set('userViolations', userViolations);
-          await db.set('userMutes', userMutes);
-          await db.set('userBans', userBans);
-
-          await safeReply(interaction, { content: `✅ Данные пользователя <@${userId}> очищены.`, ephemeral: true });
-        } catch (err) {
-          console.error('Infopol clear button error', err);
-          await safeReply(interaction, { content: 'Ошибка при очистке данных.', ephemeral: true });
-        }
-        return;
-      }
-      // Price menu buttons
-      if (interaction.customId && interaction.customId.startsWith('price_')) {
-        try { await handlePriceButton(interaction); } catch (err) { console.error('Price button error', err); await safeReply(interaction, { content: 'Ошибка при обработке прайса.', ephemeral: true }); }
-        return;
-      }
-      // AI buttons (ai_register, ai_new, ai_list, ai_action_*)
-      if (interaction.customId && interaction.customId.startsWith('ai_')) {
-        // Handle AI action buttons (goto, close)
-        if (interaction.customId.startsWith('ai_action_goto_') || interaction.customId.startsWith('ai_action_close_')) {
-          try {
-            await db.ensureReady();
-            const userId = String(interaction.user.id);
-            const allChats = db.get('aiChats') || {};
-            const userChat = allChats[userId];
-            
-            if (!userChat) {
-              await safeReply(interaction, { content: '❌ Ветка не найдена.', ephemeral: true });
-              return;
-            }
-
-            if (interaction.customId.startsWith('ai_action_goto_')) {
-              // Перейти в ветку
-              if (!userChat.threadId) {
-                await safeReply(interaction, { content: '❌ Тред не найден.', ephemeral: true });
-                return;
-              }
-              await safeReply(interaction, { content: `🚀 Ссылка на ветку: <#${userChat.threadId}>`, ephemeral: true });
-            } else if (interaction.customId.startsWith('ai_action_close_')) {
-              // Закрыть ветку
-              if (userChat.threadId) {
-                const thread = await client.channels.fetch(userChat.threadId).catch(() => null);
-                if (thread && typeof thread.setArchived === 'function') {
-                  try { await thread.setArchived(true); } catch (e) { console.warn('Failed to archive thread', e); }
-                }
-              }
-              userChat.status = 'closed';
-              userChat.closedAt = new Date().toISOString();
-              await db.set('aiChats', allChats);
-              await safeReply(interaction, { content: `✅ Ветка ${userChat.chatId} закрыта.`, ephemeral: true });
-            }
-          } catch (err) {
-            console.error('AI action button error', err);
-            await safeReply(interaction, { content: 'Ошибка при выполнении действия.', ephemeral: true });
-          }
-          return;
-        }
-
-        // Обработка основных кнопок (регистрация, создание новой, список)
-        try { await handleAiButton(interaction); } catch (err) { console.error('AI button error', err); await safeReply(interaction, { content: 'Ошибка при обработке кнопки ИИ.', ephemeral: true }); }
-        return;
-      }
-      // Menu buttons
-      if (interaction.customId && interaction.customId.startsWith('menu_')) {
-        try { await handleMenuButton(interaction); } catch (err) { console.error('Menu button error', err); await safeReply(interaction, { content: 'Ошибка при обработке меню.', ephemeral: true }); }
-        return;
-      }
-      // Post Manager buttons
-      if (interaction.customId && (interaction.customId.startsWith('post_') || interaction.customId.startsWith('pm_'))) {
-        try { await handlePostManagerButton(interaction); } catch (err) { console.error('Post manager button error', err); await safeReply(interaction, { content: 'Ошибка при управлении постом.', ephemeral: true }); }
-        return;
-      }
-      // Player panel buttons (Viht player v.4214)
-      if (interaction.customId && interaction.customId.startsWith('player_')) {
-        try { await handlePlayerPanelButton(interaction, client); } catch (err) { console.error('Player panel button error', err); await safeReply(interaction, { content: 'Ошибка при управлении плеером.', ephemeral: true }); }
-        return;
-      }
-      // Statistics graph buttons (grafs command)
-      if (interaction.customId && (interaction.customId.startsWith('grafs_recent') || interaction.customId.startsWith('grafs_all') || interaction.customId.startsWith('grafs_test') || interaction.customId === 'grafs_back')) {
-        try {
-          const grafsCommand = client.commands.get('grafs');
-          if (grafsCommand) {
-            if (interaction.customId === 'grafs_back') {
-              await grafsCommand.handleBackButton(interaction);
-            } else {
-              await grafsCommand.handleButton(interaction);
-            }
-          }
-        } catch (err) { console.error('Grafs button error', err); await safeReply(interaction, { content: 'Ошибка при загрузке статистики.', ephemeral: true }); }
-        return;
-      }
-      // Music/Radio buttons
-        // Control panel buttons (cabinet, main menu, etc)
-        if (interaction.customId.includes('cabinet') || interaction.customId.includes('main_menu') || interaction.customId === 'info_btn') {
-          try { await handleControlPanelButton(interaction); } catch (err) { console.error('Control panel button error', err); await safeReply(interaction, { content: 'Ошибка при обработке кнопки.', ephemeral: true }); }
-          return;
-        }
-      // Обработчик новой системы музыки (YouTube + SoundCloud)
-      if (interaction.customId && interaction.customId.startsWith('music_')) {
-        try { 
-          const musicHandler = require('./music/musicHandlers');
-          if (interaction.isButton()) await musicHandler.handleMusicButtons(interaction);
-          if (interaction.isStringSelectMenu()) await musicHandler.handleMusicSelect(interaction);
-          if (interaction.isModalSubmit()) await musicHandler.handleMusicSearch(interaction);
-        } catch (err) { 
-          console.error('[MUSIC] Error:', err); 
-          await safeReply(interaction, { content: '❌ Ошибка при обработке музыки.', ephemeral: true }); 
-        }
-        return;
-      }
-      if (interaction.customId.startsWith('radio_')) {
-        try { await handlePlayerPanelButton(interaction, client); } catch (err) { console.error('Music button error', err); await safeReply(interaction, { content: 'Ошибка при обработке кнопки музыки.', ephemeral: true }); }
-        return;
-      }
-      // Profile buttons
-      if (interaction.customId === 'profile_music_stats') {
-        try {
-          const musicEmbeds = require('./music-interface/musicEmbeds');
-          const music = db.get('music') || {};
-          const userId = interaction.user.id;
-          const guildId = interaction.guildId;
-          const historyTracks = (music.history && music.history[`${guildId}_${userId}`]) || [];
-          const favTracks = (music.favorites && music.favorites[`${guildId}_${userId}`]) || [];
-          const playlists = (music.playlists && music.playlists[`${guildId}_${userId}`]) || {};
-          
-          const embed = musicEmbeds.createPlaylistsEmbed(playlists);
-          const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('profile_show_history').setLabel('История').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('profile_show_favorites').setLabel('Избранное').setStyle(ButtonStyle.Secondary)
-          );
-          await safeReply(interaction, { embeds: [embed], components: [row], ephemeral: true });
-        } catch (err) {
-          console.error('Profile music stats error', err);
-          await safeReply(interaction, { content: 'Ошибка при загрузке статистики музыки.', ephemeral: true });
-        }
-        return;
-      }
-      if (interaction.customId === 'profile_show_history') {
-        try {
-          const musicEmbeds = require('./music-interface/musicEmbeds');
-          const music = db.get('music') || {};
-          const userId = interaction.user.id;
-          const guildId = interaction.guildId;
-          const historyTracks = (music.history && music.history[`${guildId}_${userId}`]) || [];
-          
-          const embed = musicEmbeds.createHistoryEmbed(historyTracks);
-          await safeUpdate(interaction, { embeds: [embed] });
-        } catch (err) {
-          console.error('Profile history error', err);
-          await safeReply(interaction, { content: 'Ошибка при загрузке истории.', ephemeral: true });
-        }
-        return;
-      }
-      if (interaction.customId === 'profile_show_favorites') {
-        try {
-          const musicEmbeds = require('./music-interface/musicEmbeds');
-          const music = db.get('music') || {};
-          const userId = interaction.user.id;
-          const guildId = interaction.guildId;
-          const favTracks = (music.favorites && music.favorites[`${guildId}_${userId}`]) || [];
-          
-          const embed = musicEmbeds.createFavoritesEmbed(favTracks);
-          await safeUpdate(interaction, { embeds: [embed] });
-        } catch (err) {
-          console.error('Profile favorites error', err);
-          await safeReply(interaction, { content: 'Ошибка при загрузке избранного.', ephemeral: true });
-        }
-        return;
-      }
-      if (interaction.customId === 'profile_achievements') {
-        try {
-          const achievements = musicPlayer.getAchievements(interaction.user.id);
-          const achievementList = Object.entries(achievements).map(([name, data]) => {
-            return `**${name}**: ${data.count || 0} (разблокировано: ${data.unlockedAt || '—'})`;
-          }).join('\n') || 'Нет достижений';
-          
-          const embed = new EmbedBuilder()
-            .setTitle(`🏆 Достижения — ${interaction.user.username}`)
-            .setDescription(achievementList)
-            .setColor(0xFFD700)
-            .setFooter({ text: 'Заработайте достижения, используя различные функции бота!' });
-          
-          await safeReply(interaction, { embeds: [embed], ephemeral: true });
-        } catch (err) {
-          console.error('Profile achievements error', err);
-          await safeReply(interaction, { content: 'Ошибка при загрузке достижений.', ephemeral: true });
-        }
-        return;
-      }
-      // DM Menu buttons
-      if (interaction.customId && interaction.customId.startsWith('dm_menu_')) {
-        try {
-          const dmMenu = require('./dm-menu');
-          await dmMenu.handleDMMenuButton(interaction);
-        } catch (err) {
-          console.error('DM menu button error', err);
-          await safeReply(interaction, { content: 'Ошибка при обработке меню.', ephemeral: true });
-        }
-        return;
-      }
-      // Settings and moderation buttons
-      if (interaction.customId && (interaction.customId.startsWith('settings_') || interaction.customId.startsWith('mod_'))) {
-        try {
-          if (interaction.customId.startsWith('settings_')) {
-            const settingsCmd = client.commands.get('settings');
-            if (settingsCmd && settingsCmd.handleButton) {
-              await settingsCmd.handleButton(interaction);
-            }
-          } else if (interaction.customId.startsWith('mod_')) {
-            const modCmd = client.commands.get('moderation');
-            if (modCmd && modCmd.handleButton) {
-              await modCmd.handleButton(interaction);
-            }
-          }
-        } catch (err) {
-          console.error('Settings/moderation button error', err);
-          await safeReply(interaction, { content: '❌ Ошибка при обработке команды.', ephemeral: true });
-        }
-        return;
-      }
-      // Reviews buttons
-      if (interaction.customId && interaction.customId.startsWith('review_')) {
-        try {
-          const reviewsCmd = client.commands.get('reviews');
-          if (reviewsCmd && reviewsCmd.handleButton) {
-            await reviewsCmd.handleButton(interaction);
-          }
-          // Handle review approval/rejection buttons
-          if (interaction.customId.startsWith('review_approve_') || interaction.customId.startsWith('review_reject_')) {
-            if (reviewsCmd && reviewsCmd.handleReviewButton) {
-              await reviewsCmd.handleReviewButton(interaction);
-            }
-          }
-        } catch (err) {
-          console.error('Reviews button error', err);
-          await safeReply(interaction, { content: '❌ Ошибка при обработке отзыва.', ephemeral: true });
-        }
-        return;
-      }
-      return;
-    }
-    if (interaction.isStringSelectMenu && interaction.isStringSelectMenu()) {
-      // Settings and moderation select menus
-      if (interaction.customId && (interaction.customId.startsWith('settings_') || interaction.customId.startsWith('mod_'))) {
-        try {
-          if (interaction.customId.startsWith('settings_')) {
-            const settingsCmd = client.commands.get('settings');
-            if (settingsCmd && settingsCmd.handleSelect) {
-              await settingsCmd.handleSelect(interaction);
-            }
-          } else if (interaction.customId.startsWith('mod_')) {
-            const modCmd = client.commands.get('moderation');
-            if (modCmd && modCmd.handleSelect) {
-              await modCmd.handleSelect(interaction);
-            }
-          }
-        } catch (err) {
-          console.error('Settings/moderation select error', err);
-          await safeReply(interaction, { content: '❌ Ошибка при обработке команды.', ephemeral: true });
-        }
-        return;
-      }
-      // Handle AI chat select menu (choose chat from list, then show action buttons)
-      if (interaction.customId && interaction.customId.startsWith('ai_chat_select_')) {
-        try {
-          await db.ensureReady();
-          const allChats = db.get('aiChats') || {};
-          // Get the userId from the select menu value (stored when building the menu)
-          const selectedUserId = String(interaction.values[0]);
-          const userChat = allChats[selectedUserId];
-          
-          if (!userChat) {
-            await safeReply(interaction, { content: '❌ Ветка не найдена.', ephemeral: true });
-            return;
-          }
-
-          // Show action buttons: перейти или закрыть
-          const actionRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId(`ai_action_goto_${selectedUserId}`)
-              .setLabel('Перейти в ветку')
-              .setStyle(ButtonStyle.Primary)
-              .setEmoji('🚀'),
-            new ButtonBuilder()
-              .setCustomId(`ai_action_close_${selectedUserId}`)
-              .setLabel('Закрыть ветку')
-              .setStyle(ButtonStyle.Danger)
-              .setEmoji('❌')
-          );
-
-          const embed = new EmbedBuilder()
-            .setTitle('📌 Управление веткой')
-            .setDescription(`**ID:** ${userChat.chatId}\n**Статус:** ${userChat.status || 'open'}`)
-            .setColor(0x0055ff)
-            .setFooter({ text: 'Выберите действие' });
-
-          await safeReply(interaction, { embeds: [embed], components: [actionRow], ephemeral: true });
-        } catch (e) {
-          console.error('AI chat select error', e);
-          await safeReply(interaction, { content: '❌ Ошибка при выборе ветки.', ephemeral: true });
-        }
-        return;
-      }
-      // Handle music search select menu
-      if (interaction.customId && interaction.customId.startsWith('music_search_select_')) {
-        try {
-          const searchId = interaction.customId.split('music_search_select_')[1];
-          const cache = global._musicSearchCache && global._musicSearchCache[searchId];
-          if (!cache) {
-            await safeReply(interaction, { content: '❌ Поиск истёк. Попробуйте ещё раз.', ephemeral: true });
-            return;
-          }
-          const selectedIndices = interaction.values.map(v => parseInt(v, 10));
-          const guild = interaction.guild || (client && await client.guilds.fetch(cache.guildId).catch(() => null));
-          const voiceChannel = guild && await guild.channels.fetch(cache.voiceChannelId).catch(() => null);
-          if (!guild || !voiceChannel) {
-            await safeReply(interaction, { content: '❌ Не удалось найти сервер или голосовой канал.', ephemeral: true });
-            return;
-          }
-          await safeReply(interaction, { content: `🎵 Начинаю воспроизведение ${selectedIndices.length} трека(ов)...`, ephemeral: true });
-
-          // Add all selected tracks to queue and play first; if first fails try next selected
-          let firstPlayed = false;
-          for (let i = 0; i < selectedIndices.length; i++) {
-            const idx = selectedIndices[i];
-            const candidate = cache.candidates[idx];
-            if (!candidate) continue;
-            const query = candidate.url || candidate.title || candidate;
-            if (i === 0) {
-              // Try first, if it fails try subsequent selected indices
-              for (let k = 0; k < selectedIndices.length; k++) {
-                const candIdx = selectedIndices[k];
-                const cand = cache.candidates[candIdx];
-                if (!cand) continue;
-                const q = cand.url || cand.title || cand;
-                try {
-                  const ok = await musicPlayer.playNow(guild, voiceChannel, q, interaction.channel, cache.userId).catch(err => { console.error('playNow error', err); return false; });
-                  if (ok) { firstPlayed = true; break; }
-                } catch (e) { console.error('playNow threw', e); }
-              }
-            } else {
-              // Queue rest (avoid queuing if first didn't play)
-              if (firstPlayed) await musicPlayer.addToQueue(guild, query).catch(e => console.error('addToQueue error', e));
-            }
-          }
-          if (!firstPlayed) {
-            try { await updateControlMessageWithError(guild.id, client, '❌ Не удалось воспроизвести выбранный трек(и).'); } catch (e) {}
-            try { await safeReply(interaction, { content: '❌ Не удалось воспроизвести выбранный трек(и).', ephemeral: true }); } catch (e) {}
-          }
-          delete global._musicSearchCache[searchId];
-          return;
-        } catch (e) {
-          console.error('music search select error', e);
-          await safeReply(interaction, { content: '❌ Ошибка при выборе трека.', ephemeral: true });
-        }
-        return;
-      }
-      // Handle player panel search select menu
-      if (interaction.customId && interaction.customId.startsWith('player_search_select_')) {
-        try {
-          const playerPanel = require('./music-interface/playerPanel');
-          await playerPanel.handlePlayerPanelSelectMenu(interaction, client);
-        } catch (e) {
-          console.error('player panel select menu error', e);
-          await safeReply(interaction, { content: '❌ Ошибка при выборе трека.', ephemeral: true });
-        }
-        return;
-      }
-    }
-    if (interaction.isModalSubmit()) {
-      // Settings and moderation modals
-      if (interaction.customId && (interaction.customId.startsWith('settings_') || interaction.customId.startsWith('mod_'))) {
-        try {
-          if (interaction.customId.startsWith('settings_')) {
-            const settingsCmd = client.commands.get('settings');
-            if (settingsCmd && settingsCmd.handleModal) {
-              await settingsCmd.handleModal(interaction);
-            }
-          } else if (interaction.customId.startsWith('mod_')) {
-            const modCmd = client.commands.get('moderation');
-            if (modCmd && modCmd.handleModal) {
-              await modCmd.handleModal(interaction);
-            }
-          }
-        } catch (err) {
-          console.error('Settings/moderation modal error', err);
-          await safeReply(interaction, { content: '❌ Ошибка: ' + (err.message || err), ephemeral: true });
-        }
-        return;
-      }
-      // Reviews modal
-      if (interaction.customId && interaction.customId.startsWith('review_')) {
-        try {
-          const reviewsCmd = client.commands.get('reviews');
-          if (reviewsCmd && reviewsCmd.handleModal) {
-            await reviewsCmd.handleModal(interaction);
-          }
-        } catch (err) {
-          console.error('Reviews modal error', err);
-          await safeReply(interaction, { content: '❌ Ошибка: ' + (err.message || err), ephemeral: true });
-        }
-        return;
-      }
-      // Handle support creation modal submission
-      if (interaction.customId === 'support_modal') {
-        try {
-          const subject = interaction.fields.getTextInputValue('subject').slice(0,60);
-          const message = interaction.fields.getTextInputValue('message').slice(0,2000);
-          const ALLOWED_CREATOR_ROLES = ['1441744621641400353','1441745037531549777','1436486915221098588','1436486486156382299','1436486253066326067','1436485697392607303'];
-          const cfgRoles = require('./config');
-          const STAFF_ROLES = (cfgRoles.adminRoles && cfgRoles.adminRoles.length > 0) ? cfgRoles.adminRoles : ['1436485697392607303','1436486253066326067'];
-          const member = interaction.member;
-          const allowed = member && member.roles && member.roles.cache && ALLOWED_CREATOR_ROLES.some(r => member.roles.cache.has(r));
-          if (!allowed) return await safeReply(interaction, { content: 'У вас нет роли для создания обращения.', ephemeral: true });
-          const channel = await interaction.client.channels.fetch('1442575929044897792').catch(() => null);
-          if (!channel) return await safeReply(interaction, { content: 'Канал поддержки не найден.', ephemeral: true });
-          const threadName = `ticket-${interaction.user.username}-${subject.replace(/[^a-zA-Z0-9-_]/g,'_').slice(0,40)}`;
-          let thread = null;
-          try { thread = await channel.threads.create({ name: threadName, autoArchiveDuration: 1440, type: ChannelType.PrivateThread }); } catch (err) { console.error('thread create failed', err); thread = null; }
-          let threadId = null; const ping = STAFF_ROLES.map(r => `<@&${r}>`).join(' ');
-          if (thread) {
-            threadId = thread.id;
-            try { await thread.members.add(interaction.user.id).catch(() => null); for (const rid of STAFF_ROLES) { const members = interaction.guild.members.cache.filter(m => m.roles.cache.has(rid)); for (const m of members.values()) { try { await thread.members.add(m.id); } catch (e) {} } } } catch (e) {}
-            await thread.send({ content: `${ping}\n**Тема:** ${subject}\n**От:** <@${interaction.user.id}>\n\n${message}` });
-          } else { const sent = await channel.send({ content: `${ping}\n**Новая заявка**: ${subject}\n**От:** <@${interaction.user.id}>\n\n${message}` }); threadId = sent.id; }
-          const all = db.get && db.get('tickets') ? db.get('tickets') : [];
-          const ticket = { id: `t_${Date.now()}`, threadId, channelId: channel.id, creatorId: interaction.user.id, subject, message, status: 'open', createdAt: new Date().toISOString() };
-          all.push(ticket); await db.set('tickets', all);
-          return await safeReply(interaction, { content: `Обращение создано. ${thread ? `Тред: <#${thread.id}>` : 'Сделано в канале.'}`, ephemeral: true });
-        } catch (e) { console.error('modal submit error', e); return await safeReply(interaction, { content: 'Ошибка при создании обращения.', ephemeral: true }); }
-      }
-      // Music modal: play now
-      if (interaction.customId === 'music_modal') {
-        try {
-          const query = interaction.fields.getTextInputValue('music_query').slice(0, 400);
-          const guild = interaction.guild;
-          const member = interaction.member || (guild ? await guild.members.fetch(interaction.user.id).catch(() => null) : null);
-          const voiceChannel = member && member.voice ? member.voice.channel : null;
-          if (!voiceChannel) {
-            await safeReply(interaction, { content: 'Вы не в голосовом канале.', ephemeral: true });
-            return;
-          }
-          // Let musicPlayer.playNow handle all updates via updateControlMessageWithError
-          await safeReply(interaction, { content: '🔎 Ищу и начинаю воспроизведение...', ephemeral: true });
-          await musicPlayer.playNow(guild, voiceChannel, query, interaction.channel, interaction.user.id).catch(async (e) => { console.error('playNow error', e); });
-          return;
-        } catch (e) { console.error('music_modal submit error', e); return await safeReply(interaction, { content: 'Ошибка при обработке формы музыки.', ephemeral: true }); }
-      }
-      // Jockie Music modal handler
-      if (interaction.customId === 'music_play_modal' || interaction.customId === 'jockie_play_modal') {
-        try {
-          const musicHandler = require('./menus/musicHandler');
-          await musicHandler.handleMusicModals(interaction);
-        } catch (err) {
-          console.error('Music modal error', err);
-          await safeReply(interaction, { content: 'Ошибка при обработке формы.', ephemeral: true });
-        }
-        return;
-      }
-      // Music modal: add to queue
-      if (interaction.customId === 'music_modal_queue') {
-        try {
-          const query = interaction.fields.getTextInputValue('music_query').slice(0, 400);
-          const guild = interaction.guild;
-          const ok = await musicPlayer.addToQueue(guild, query);
-          if (ok) {
-            await safeReply(interaction, { content: 'Добавлено в очередь ✅', ephemeral: true });
-          } else {
-            await safeReply(interaction, { content: 'Не удалось добавить в очередь.', ephemeral: true });
-          }
-          return;
-        } catch (e) { console.error('music_modal_queue submit error', e); return await safeReply(interaction, { content: 'Ошибка при обработке формы музыки.', ephemeral: true }); }
-      }
-      // New YouTube music search modal
-      if (interaction.customId === 'music_search_modal') {
-        try {
-          const { handleMusicSearchSubmit } = require('./music/musicHandlers');
-          await handleMusicSearchSubmit(interaction);
-          return;
-        } catch (e) { console.error('music_search_modal error', e); return await safeReply(interaction, { content: 'Ошибка поиска песни.', ephemeral: true }); }
-      }
-      // Post Manager modals
-      if (interaction.customId && (interaction.customId.startsWith('post_') || interaction.customId.startsWith('pm_'))) {
-        try {
-          console.log('[POST_MANAGER] Обработка модали:', interaction.customId);
-          await handlePostManagerModal(interaction);
-        } catch (err) { 
-          console.error('[POST_MANAGER] Ошибка модали:', err.message, err.stack); 
-          try {
-            await interaction.reply({ content: '❌ Ошибка формы: ' + err.message, ephemeral: true });
-          } catch (replyErr) {
-            console.error('[POST_MANAGER] Не удалось отправить ошибку пользователю:', replyErr.message);
-          }
-        }
-        return;
-      }
-    }
-    // Handle all select menus (including channel, string select, etc)
-    if (interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu() || interaction.isUserSelectMenu()) {
-      // YouTube music search results select
-      if (interaction.customId === 'music_select') {
-        try {
-          const { handleMusicSelect } = require('./music/musicHandlers');
-          await handleMusicSelect(interaction);
-          return;
-        } catch (e) { console.error('music_select error', e); await safeReply(interaction, { content: 'Ошибка при выборе песни.', ephemeral: true }); }
-      }
-      // Viht Moroz - module toggle
-      if (interaction.customId === 'moroz_select') {
-        try {
-          await db.ensureReady();
-          const moduleStates = db.get('botModules') || {};
-          const selectedModule = interaction.values[0];
-          
-          // Переключаем состояние
-          moduleStates[selectedModule] = !moduleStates[selectedModule];
-          await db.set('botModules', moduleStates);
-          
-          const status = moduleStates[selectedModule] ? '✅ Включен' : '❌ Отключен';
-          await interaction.reply({
-            content: `${status}`,
-            ephemeral: true
-          }).catch(() => null);
-        } catch (err) { console.error('Moroz toggle error', err); await safeReply(interaction, { content: 'Ошибка при переключении.', ephemeral: true }); }
-        return;
-      }
-      // Post Manager channel/color select
-      if (interaction.customId && (interaction.customId.startsWith('post_') || interaction.customId.startsWith('pm_'))) {
-        try { await handlePostManagerSelect(interaction); } catch (err) { console.error('Post manager select error', err); await safeReply(interaction, { content: 'Ошибка при выборе.', ephemeral: true }); }
-        return;
-      }
-    }
-  } catch (err) { console.error('interactionCreate handler error', err); }
-});
-
-// Onboarding: send DM to new members unless they opted out
-client.on('guildMemberAdd', async (member) => {
-  try {
-    await db.ensureReady();
-    
-    // Track user join for statistics
+// Load events
+const eventsPath = path.join(__dirname, 'events');
+if (fs.existsSync(eventsPath)) {
+  const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
+  for (const file of eventFiles) {
     try {
-      const statsTracker = require('./libs/statsTracker');
-      statsTracker.initStats();
-      statsTracker.trackUserJoin(member.id, member.guild.id);
-      
-      // Track user role
-      if (member.roles.cache.size > 0) {
-        member.roles.cache.forEach(role => {
-          statsTracker.trackUserRole(member.id, role.name);
-        });
+      const event = require(path.join(eventsPath, file));
+      if (event.name && event.execute) {
+        if (event.once) {
+          client.once(event.name, (...args) => event.execute(...args));
+        } else {
+          client.on(event.name, (...args) => event.execute(...args));
+        }
       }
     } catch (e) {
-      console.warn('Stats tracking failed:', e.message);
+      console.warn('Failed loading event', file, e && e.message ? e.message : e);
     }
-    
-    const prefs = db.get('prefs') || {};
-    const enabled = (prefs.onboarding && prefs.onboarding[member.id] !== false);
-    if (!enabled) return;
-    const welcome = `Привет, ${member.user.username}! Добро пожаловать на сервер. Если хотите, используйте команду /onboarding optout чтобы отключить приветственные сообщения.`;
-    await member.send(welcome).catch(() => null);
-  } catch (e) { console.warn('onboarding send failed', e && e.message); }
-});
+  }
+}
 
-// Schedule persistent reminders stored in DB
+// Load handlers
+const handlersPath = path.join(__dirname, 'handlers');
+if (fs.existsSync(handlersPath)) {
+  const handlerFiles = fs.readdirSync(handlersPath).filter(f => f.endsWith('.js'));
+  for (const file of handlerFiles) {
+    try {
+      const handler = require(path.join(handlersPath, file));
+      if (handler.name && handler.execute) {
+        client.on(handler.name, (...args) => handler.execute(...args));
+      }
+    } catch (e) {
+      console.warn('Failed loading handler', file, e && e.message ? e.message : e);
+    }
+  }
+}
+
+// Schedule reminders
 (async function scheduleReminders() {
   try {
     await db.ensureReady();
@@ -837,281 +108,50 @@ client.on('guildMemberAdd', async (member) => {
     for (const r of reminders) {
       const delay = Math.max(0, (r.when || 0) - now);
       setTimeout(async () => {
-        try { const ch = await client.channels.fetch(r.channelId).catch(()=>null); if (ch) await ch.send(`<@${r.userId}> Напоминание: ${r.text}`); } catch (e) {}
-        // remove reminder from db
-        const cur = db.get('reminders') || [];
-        await db.set('reminders', cur.filter(x => x.id !== r.id));
+        try {
+          const ch = await client.channels.fetch(r.channelId).catch(() => null);
+          if (ch) await ch.send(`<@${r.userId}> Напоминание: ${r.text}`);
+          const cur = db.get('reminders') || [];
+          await db.set('reminders', cur.filter(x => x.id !== r.id));
+        } catch (e) {}
       }, delay);
     }
-  } catch (e) { console.warn('scheduleReminders failed', e && e.message); }
+  } catch (e) {
+    console.warn('scheduleReminders failed', e && e.message);
+  }
 })();
 
-// (Channel constants declared earlier)
-
-async function findRecentAuditEntry(guild, predicate, windowMs = 10000) {
-  try {
-    const logs = await guild.fetchAuditLogs({ limit: 30 }).catch(() => null);
-    if (!logs || !logs.entries) return null;
-    const now = Date.now();
-    for (const entry of logs.entries.values()) {
-      try {
-        const created = entry.createdAt ? entry.createdAt.getTime() : (entry.createdTimestamp || 0);
-        if (now - created > windowMs) continue;
-        if (typeof predicate === 'function' && predicate(entry)) return entry;
-      } catch (e) {}
-    }
-  } catch (e) {}
-  return null;
-}
-
-async function sendActivityEmbed(guild, embed, channelId = VOICE_LOG_CHANNEL) {
-  try {
-    const ch = await client.channels.fetch(channelId).catch(() => null);
-    if (ch && ch.isTextBased && ch.isTextBased()) {
-      await ch.send({ embeds: [embed] }).catch(() => null);
-    }
-  } catch (e) { console.warn('sendActivityEmbed failed', e && e.message); }
-}
-
-// Voice state: detect joins, leaves, server mute/unmute and forced disconnects
-client.on('voiceStateUpdate', async (oldState, newState) => {
-  try {
-    const guild = oldState.guild || newState.guild;
-    if (!guild) {
-      console.warn('[VOICE] No guild found in voiceStateUpdate');
-      return;
-    }
-    
-    const member = newState.member || oldState.member;
-    if (!member) {
-      console.warn('[VOICE] No member found in voiceStateUpdate');
-      return;
-    }
-
-    console.log(`[VOICE] Update for ${member.user.tag}: old=${oldState.channel?.name || 'none'} -> new=${newState.channel?.name || 'none'}`);
-
-    // Вход в голосовой канал (новый канал, был без канала или был в другом)
-    if (!oldState.channel && newState.channel) {
-      console.log(`[VOICE] ${member.user.tag} JOINED ${newState.channel.name}`);
-      try {
-        const embed = new EmbedBuilder()
-          .setTitle('🔊 Вошел в голосовой')
-          .setColor(0x4CAF50)
-          .setDescription(`<@${member.id}> присоединился к каналу **${newState.channel.name}**`)
-          .addFields(
-            { name: 'Пользователь', value: `${member.user.tag}`, inline: true },
-            { name: 'Канал', value: `${newState.channel.name}`, inline: true },
-            { name: 'Время', value: new Date().toLocaleString('ru-RU'), inline: false }
-          )
-          .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-          .setTimestamp();
-        await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
-        console.log(`[VOICE] Sent JOIN notification for ${member.user.tag}`);
-      } catch (e) {
-        console.error(`[VOICE] Failed to send JOIN notification: ${e.message}`);
-      }
-    }
-    // Смена голосового канала (был в канале, перешел в другой)
-    else if (oldState.channel && newState.channel && oldState.channel.id !== newState.channel.id) {
-      console.log(`[VOICE] ${member.user.tag} MOVED from ${oldState.channel.name} to ${newState.channel.name}`);
-      try {
-        const embed = new EmbedBuilder()
-          .setTitle('↔️ Переместился в голосовой')
-          .setColor(0x2196F3)
-          .setDescription(`<@${member.id}> переместился из **${oldState.channel.name}** в **${newState.channel.name}**`)
-          .addFields(
-            { name: 'Из канала', value: `${oldState.channel.name}`, inline: true },
-            { name: 'В канал', value: `${newState.channel.name}`, inline: true }
-          )
-          .setTimestamp();
-        await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
-        console.log(`[VOICE] Sent MOVE notification for ${member.user.tag}`);
-      } catch (e) {
-        console.error(`[VOICE] Failed to send MOVE notification: ${e.message}`);
-      }
-    }
-
-    // Server mute/unmute
-    if (oldState.serverMute !== newState.serverMute) {
-      console.log(`[VOICE] ${member.user.tag} serverMute: ${oldState.serverMute} -> ${newState.serverMute}`);
-      try {
-        const action = newState.serverMute ? 'Выключил микрофон' : 'Включил микрофон';
-        const audit = await findRecentAuditEntry(guild, e => String(e.targetId) === String(member.id));
-        const by = audit && audit.executor ? `<@${audit.executor.id}>` : 'система';
-        const embed = new EmbedBuilder()
-          .setTitle('🔇 Изменение микрофона')
-          .setColor(newState.serverMute ? 0xFF5252 : 0x4CAF50)
-          .setDescription(`${by} — ${action} у <@${member.id}>`)
-          .addFields(
-            { name: 'Пользователь', value: `${member.user.tag}`, inline: true },
-            { name: 'Действие', value: action, inline: true }
-          )
-          .setTimestamp();
-        await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
-        console.log(`[VOICE] Sent MUTE notification for ${member.user.tag}`);
-      } catch (e) {
-        console.error(`[VOICE] Failed to send MUTE notification: ${e.message}`);
-      }
-    }
-
-    // Выход из голосового канала
-    if (oldState.channel && !newState.channel) {
-      console.log(`[VOICE] ${member.user.tag} LEFT ${oldState.channel.name}`);
-      try {
-        // Try to find an audit entry that indicates a forced disconnect
-        const audit = await findRecentAuditEntry(guild, e => String(e.targetId) === String(member.id));
-        const by = audit && audit.executor ? `<@${audit.executor.id}>` : null;
-        
-        if (by) {
-          // Был кик
-          const embed = new EmbedBuilder()
-            .setTitle('👢 Выгнан из голосового')
-            .setColor(0xFF7043)
-            .setDescription(`${by} выгнал(а) <@${member.id}> из голосового канала **${oldState.channel.name}**`)
-            .addFields(
-              { name: 'Пользователь', value: `${member.user.tag}`, inline: true },
-              { name: 'Из канала', value: `${oldState.channel.name}`, inline: true }
-            )
-            .setTimestamp();
-          await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
-          console.log(`[VOICE] Sent KICK notification for ${member.user.tag}`);
-        } else {
-          // Просто вышел
-          const embed = new EmbedBuilder()
-            .setTitle('🏃 Вышел из голосового')
-            .setColor(0x607D8B)
-            .setDescription(`<@${member.id}> покинул(а) голосовой канал **${oldState.channel.name}**`)
-            .addFields(
-              { name: 'Пользователь', value: `${member.user.tag}`, inline: true },
-              { name: 'Из канала', value: `${oldState.channel.name}`, inline: true }
-            )
-            .setTimestamp();
-          await sendActivityEmbed(guild, embed, VOICE_LOG_CHANNEL);
-          console.log(`[VOICE] Sent LEAVE notification for ${member.user.tag}`);
-        }
-      } catch (e) {
-        console.error(`[VOICE] Failed to send LEAVE/KICK notification: ${e.message}`);
-      }
-    }
-  } catch (e) {
-    console.error('[VOICE] voiceStateUpdate handler error:', e && e.message ? e.message : e);
-  }
-});
-
-// Nickname change logging
-client.on('guildMemberUpdate', async (oldMember, newMember) => {
-  try {
-    const guild = newMember.guild || oldMember.guild;
-    if (!guild) return;
-    
-    // Track boost if user got premium role
-    try {
-      const oldPremiumRoles = oldMember.roles.cache.filter(r => r.name.toLowerCase().includes('premium') || r.name.toLowerCase().includes('boost'));
-      const newPremiumRoles = newMember.roles.cache.filter(r => r.name.toLowerCase().includes('premium') || r.name.toLowerCase().includes('boost'));
-      
-      if (newPremiumRoles.size > oldPremiumRoles.size) {
-        const statsTracker = require('./libs/statsTracker');
-        statsTracker.trackBoost(newMember.id, guild.id);
-      }
-    } catch (e) {
-      console.warn('Boost tracking failed:', e.message);
-    }
-    
-    const oldNick = oldMember.nickname || oldMember.displayName || '';
-    const newNick = newMember.nickname || newMember.displayName || '';
-    if (oldNick !== newNick) {
-      const audit = await findRecentAuditEntry(guild, e => String(e.targetId) === String(newMember.id));
-      const by = audit && audit.executor ? `<@${audit.executor.id}>` : 'Неизвестно';
-      const embed = new EmbedBuilder().setTitle('✏️ Изменение ника')
-        .setColor(0xFFC107)
-        .setDescription(`${by} изменил(а) ник пользователя <@${newMember.id}>`)
-        .addFields(
-          { name: 'Старый ник', value: oldNick || '—', inline: true },
-          { name: 'Новый ник', value: newNick || '—', inline: true }
-        )
-        .setTimestamp();
-      await sendActivityEmbed(guild, embed, NICK_CHANGE_LOG_CHANNEL);
-    }
-  } catch (e) { console.error('guildMemberUpdate handler failed', e && e.message); }
-});
-
-// Message deletion logging
-client.on('messageDelete', async (message) => {
-  try {
-    if (!message || !message.guild) return;
-    const guild = message.guild;
-    const channel = message.channel;
-    const author = message.author;
-    
-    // Проверяем если это сообщение отзыва - обновляем счетчик
-    const REVIEWS_VOICE_CHANNEL_ID = '1449757724274589829'; // Канал "Отзывы"
-    if (channel.id === REVIEWS_VOICE_CHANNEL_ID || (channel.parentId && channel.parentId === REVIEWS_VOICE_CHANNEL_ID)) {
-      try {
-        const reviewsCmd = client.commands.get('reviews');
-        if (reviewsCmd && reviewsCmd.handleReviewDeleted) {
-          await reviewsCmd.handleReviewDeleted(message, guild, client).catch(err => {
-            console.warn('[Reviews] Error updating reviews count on delete:', err?.message);
-          });
-        }
-      } catch (err) {
-        console.warn('[Reviews] Failed to update reviews:', err?.message);
-      }
-    }
-    
-    // If the author was a bot, skip logging
-    if (author && author.bot) return;
-
-    // try to find an audit entry for a moderator deletion
-    const audit = await findRecentAuditEntry(guild, e => {
-      try {
-        // Some audit entries include extra.channel (deleted messages count), match by channel id
-        if (e.extra && e.extra.channel && String(e.extra.channel.id) === String(channel.id)) return true;
-        if (String(e.targetId) === String(author && author.id)) return true;
-      } catch (ee) {}
-      return false;
-    }, 15000);
-    // If audit shows the bot (this client) deleted the message (e.g. via a moderation/cleanup command), do not log
-    if (audit && audit.executor && String(audit.executor.id) === String(client.user.id)) return;
-    const by = audit && audit.executor ? `<@${audit.executor.id}>` : (author ? `<@${author.id}> (сам)` : 'Неизвестно');
-    const content = message.content ? (message.content.length > 1000 ? message.content.slice(0,1000) + '…' : message.content) : (message.embeds && message.embeds.length ? '[embed]' : '[нет текста]');
-    const embed = new EmbedBuilder().setTitle('🗑️ Удалено сообщение')
-      .setColor(0x9E9E9E)
-      .addFields(
-        { name: 'Автор', value: author ? `<@${author.id}>` : 'Неизвестно', inline: true },
-        { name: 'Удалил', value: by, inline: true },
-        { name: 'Канал', value: channel ? `${channel.name}` : '—', inline: true },
-        { name: 'Содержимое', value: content }
-      ).setTimestamp();
-    await sendActivityEmbed(guild, embed, MESSAGE_EDIT_LOG_CHANNEL);
-  } catch (e) { console.error('messageDelete handler failed', e && e.message); }
-});
-// Load user language preferences into client for quick access
+// Load user languages
 (async function loadUserLangs() {
   try {
     await db.ensureReady();
     const ul = db.get('userLangs') || {};
     client.userLangs = new Map(Object.entries(ul));
-  } catch (e) { client.userLangs = new Map(); }
-})();
-if (handleReactionAdd) client.on('messageReactionAdd', async (reaction, user) => { try { await handleReactionAdd(reaction, user); } catch (e) { console.error('messageReactionAdd handler:', e); } });
-if (handleReactionRemove) client.on('messageReactionRemove', async (reaction, user) => { try { await handleReactionRemove(reaction, user); } catch (e) { console.error('messageReactionRemove handler:', e); } });
-// Guild member join event — create DM menu for new members
-client.on('guildMemberAdd', async (member) => {
-  try {
-    const dmMenu = require('./dm-menu');
-    await dmMenu.createUserMenu(client, member.id, member.guild.id);
-  } catch (err) {
-    console.error('guildMemberAdd DM menu error:', err.message);
+  } catch (e) {
+    client.userLangs = new Map();
   }
+})();
+
+// Reaction handlers
+let handleReactionAdd = null;
+let handleReactionRemove = null;
+try {
+  const roleHandlers = require('./roles/reactionRole');
+  handleReactionAdd = roleHandlers.handleReactionAdd;
+  handleReactionRemove = roleHandlers.handleReactionRemove;
+} catch (e) { /* optional */ }
+
+if (handleReactionAdd) client.on('messageReactionAdd', async (reaction, user) => {
+  try { await handleReactionAdd(reaction, user); } catch (e) { console.error('messageReactionAdd handler:', e); }
 });
-// Hourly cleanup task for DM menus
+if (handleReactionRemove) client.on('messageReactionRemove', async (reaction, user) => {
+  try { await handleReactionRemove(reaction, user); } catch (e) { console.error('messageReactionRemove handler:', e); }
+});
+
+// Hourly cleanup
 setInterval(async () => {
   try {
-    // Оптимизация: не итерируем по всем членам, только очищаем старые меню из памяти
     const dmMenu = require('./dm-menu');
-    
-    // Вместо fetch всех членов, просто вызываем очистку в dmMenu
-    // которая удалит старые сообщения которые не используются
     if (typeof dmMenu.cleanupExpiredMenus === 'function') {
       await dmMenu.cleanupExpiredMenus().catch(() => {});
       console.log('[CLEANUP] Expired DM menus cleaned');
@@ -1119,166 +159,19 @@ setInterval(async () => {
   } catch (err) {
     console.error('[CLEANUP] Hourly DM cleanup error:', err.message);
   }
-}, 3600000); // 1 hour = 3600000 ms
-// AI chat handler
-const { aiChatChannelId } = require('./config');
-const COOLDOWN_MS = 3000;
-const lastMessageAt = new Map();
-const processedMessages = new Set(); // Track processed messages
+}, 3600000);
 
-// 🧹 Cleanup memory leaks every hour
-setInterval(() => {
-  const now = Date.now();
-  const MAX_AGE = 24 * 60 * 60 * 1000; // 24 часа
-  
-  // Очищаем lastMessageAt старше 24 часов
-  let removed = 0;
-  for (const [userId, timestamp] of lastMessageAt.entries()) {
-    if (now - timestamp > MAX_AGE) {
-      lastMessageAt.delete(userId);
-      removed++;
-    }
-  }
-  
-  // Очищаем processedMessages если слишком много
-  if (processedMessages.size > 100000) {
-    const oldSize = processedMessages.size;
-    processedMessages.clear();
-    console.log('[MEMORY] Cleared processedMessages (' + oldSize + ' items)');
-  }
-  
-  console.log('[MEMORY] Cleanup: lastMessageAt=' + lastMessageAt.size + ' users (removed ' + removed + '), processedMessages=' + processedMessages.size);
-}, 60 * 60 * 1000); // Каждый час
-
-client.on('messageCreate', async (message) => {
-  try {
-    if (message.author?.bot) return;
-    if (!message.channel) return;
-    
-    // ✨ Подсчёт сообщений для системы очков
-    try {
-      const pointSystem = require('./libs/pointSystem');
-      const milestone = await pointSystem.addMessage(message.author.id, client);
-      if (milestone) {
-        console.log(`[MESSAGES] Веха ${milestone} достигнута для ${message.author.id}`);
-      }
-    } catch (e) {
-      console.warn('Message count error:', e && e.message ? e.message : e);
-    }
-    
-    // Post Manager message input
-    try {
-      const { handlePostMessageInput } = require('./post-manager/postManager');
-      await handlePostMessageInput(message);
-    } catch (e) {
-      console.warn('Post Manager message input error:', e && e.message ? e.message : e);
-    }
-    
-    // Проверка на матерные слова - работает на всех каналах
-    try {
-      const { checkMessage } = require('./moderation/badwordHandler');
-      await checkMessage(message, client);
-    } catch (e) {
-      console.warn('Badword check failed:', e && e.message ? e.message : e);
-    }
-    
-    const ch = message.channel;
-    const isThread = !!ch?.isThread && ch.isThread();
-    const isAiMain = String(ch.id) === String(aiChatChannelId);
-    const isAiThread = isThread && String(ch.parentId) === String(aiChatChannelId);
-    if (!isAiMain && !isAiThread) return;
-   
-    // Prevent duplicate processing
-    if (processedMessages.has(message.id)) return;
-    processedMessages.add(message.id);
-    // Quick 'whoami' handler: respond with user info when user asks "кто я" or "я кто",
-    // but ignore cases containing "а я" (per request).
-    try {
-      const whoamiRegex = /^\s*(?:кто\s+я|я\s+кто)\b/i;
-      const excludeRegex = /\bа\s+я\b/i;
-      const text = (message.content || '').trim();
-      if (whoamiRegex.test(text) && !excludeRegex.test(text)) {
-        // Ensure we have member info
-        let member = message.member;
-        if ((!member || !member.roles) && message.guild) {
-          member = await message.guild.members.fetch(message.author.id).catch(() => null);
-        }
-        const user = message.author;
-        const created = user.createdAt ? new Date(user.createdAt) : null;
-        const createdStr = created ? `${String(created.getDate()).padStart(2,'0')}.${String(created.getMonth()+1).padStart(2,'0')}.${created.getFullYear()} ${String(created.getHours()).padStart(2,'0')}:${String(created.getMinutes()).padStart(2,'0')}` : '—';
-        let rolesList = 'Нет ролей';
-        if (member && member.roles && member.roles.cache) {
-          const filtered = member.roles.cache.filter(r => r.id !== message.guild.id);
-          if (filtered.size > 0) rolesList = filtered.map(r => `${r.name} (id: ${r.id})`).join(', ');
-        }
-        const reply = `🧾 **Информация о пользователе**
-**Вы:** ${user.username}
-**Ваш тег:** ${user.tag}
-**Ваш id:** ${user.id}
-**Зарегистрирован:** ${createdStr}
-**Роли:** ${rolesList} \n
-Если нужна подробная информация о ролях или правах — напишите, и я подскажу. 😊`;
-        try { await message.reply({ content: reply, allowedMentions: { parse: [] } }); } catch (e) { try { await message.channel.send(reply).catch(() => null); } catch (e2) {} }
-        return;
-      }
-    } catch (e) { console.warn('whoami handler failed', e && e.message ? e.message : e); }
-    // Ensure DB ready for greeted users tracking
-    try { if (db && db.ensureReady) await db.ensureReady(); } catch (e) { console.warn('DB ensureReady failed:', e && e.message); }
-    // Auto-greeting removed: the bot will not proactively greet or offer help.
-    // This prevents unsolicited template replies. The bot will respond only to explicit messages.
-   
-    const now = Date.now();
-    const last = lastMessageAt.get(message.author.id) || 0;
-    if (now - last < COOLDOWN_MS) return;
-    lastMessageAt.set(message.author.id, now);
-   
-    try {
-      const cfg = require('./config');
-      if (cfg.useMockAi) {
-        const q = (message.content || '').trim();
-        let quick = 'Принято. Сейчас не могу использовать внешний AI, но постараюсь помочь — уточните запрос.';
-        if (/\b(кто\s+такой\s+viht|viht|вихт)\b/i.test(q)) quick = 'Viht — команда, создающая быстрые и надёжные VPN‑решения.';
-        else if (/\b(андрей|andrey|кто\s+такой\s+андрей)\b/i.test(q)) quick = 'Андрей Вихт — основатель проекта Viht.';
-        else if (/\b(сандра|sandra)\b/i.test(q)) quick = 'Сандра — спутник и поддержка Андрея.';
-        else if (/\b(ной|noya|ной\s*бой)\b/i.test(q)) quick = 'Ной Бой — друг и товарищ команды.';
-        await message.reply(quick);
-        return;
-      }
-      try { message.channel.sendTyping(); } catch (e) {}
-      const controlRoleId = '1436485697392607303';
-      const callerIsCreator = message.member && message.member.roles && message.member.roles.cache && message.member.roles.cache.has(controlRoleId);
-      // If this message is in a private AI thread, find the aiChats record and use composite authorId (userId:chatId)
-      let authorKey = message.author.id;
-      try { await db.ensureReady(); } catch (e) {}
-      if (isAiThread) {
-        const aiChats = db.get('aiChats') || {};
-        const rec = Object.values(aiChats).find(r => r && r.threadId === ch.id);
-        if (rec && rec.chatId) {
-          authorKey = `${message.author.id}:${rec.chatId}`;
-        }
-      }
-      const reply = await sendPrompt(message.content, { callerIsCreator, authorId: authorKey, authorName: message.author.username });
-      await db.incrementAi();
-      const out = String(reply || '').trim();
-      if (out.length > 0) {
-        for (let i = 0; i < out.length; i += 1200) {
-          const chunk = out.slice(i, i + 1200);
-          await message.reply(chunk);
-        }
-      }
-    } catch (err) { console.error('AI error:', err); await message.reply('Ошибка: AI недоступен.'); }
-  } catch (err) { console.error('messageCreate handler error', err); }
-});
-// Ready: post rules and support panel (once)
-// Track bot startup time for uptime counter
+// Bot start time
 const botStartTime = Date.now();
+
+// Ready event
 client.once('ready', async () => {
   console.log(`✅ Ready as ${client.user.tag}`);
   console.log('Config flags:', { messageContentIntent, guildMembersIntent });
-  // Ensure DB is fully initialized
+
   await db.ensureReady();
   console.log('✅ DB ready, proceeding with startup status report');
-  
+
   // Initialize stats tracker
   try {
     const statsTracker = require('./libs/statsTracker');
@@ -1289,83 +182,55 @@ client.once('ready', async () => {
     console.warn('Stats tracker init failed:', e.message);
   }
 
-  // Connect to voice channel for reviews system
-  try {
-    const reviewsCommand = require('./commands/reviews');
-    if (reviewsCommand.connectToVoiceChannel) {
-      await reviewsCommand.connectToVoiceChannel(client);
-    }
-    // Ensure reviews panel exists
-    if (reviewsCommand.ensureReviewsPanel) {
-      await reviewsCommand.ensureReviewsPanel(client);
-    }
-  } catch (e) {
-    console.warn('Reviews initialization failed:', e.message);
-  }
-
-  // Инициализируем музыкальную панель - будет инициализирована позже вместе с другими панелями
-  // (see line 1568 in Post Music panel section)
-
-  // Connect to default music voice channel on startup
+  // Connect to voice channel
   try {
     const { joinVoiceChannel, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
-    const DEFAULT_VOICE_CHANNEL_ID = '1449757724274589829';
-    const DEFAULT_GUILD_ID = '1428051812103094282'; // Получить из конфига или переменной окружения
-    
-    const guild = await client.guilds.fetch(DEFAULT_GUILD_ID).catch((err) => {
-      console.warn('[VOICE] ❌ Failed to fetch guild:', DEFAULT_GUILD_ID, err?.message);
+    const guild = await client.guilds.fetch(require('./config').defaultGuildId).catch((err) => {
+      console.warn('[VOICE] Failed to fetch guild:', require('./config').defaultGuildId, err?.message);
       return null;
     });
-    
-    if (!guild) {
-      console.warn('[VOICE] Guild not found, skipping default channel connection');
-    } else {
-      const voiceChannel = await guild.channels.fetch(DEFAULT_VOICE_CHANNEL_ID).catch((err) => {
-        console.warn('[VOICE] Failed to fetch default voice channel:', DEFAULT_VOICE_CHANNEL_ID, err?.message);
+
+    if (guild) {
+      const voiceChannel = await guild.channels.fetch(require('./config').defaultVoiceChannelId).catch((err) => {
+        console.warn('[VOICE] Failed to fetch default voice channel:', require('./config').defaultVoiceChannelId, err?.message);
         return null;
       });
-      
-      if (voiceChannel && voiceChannel.isVoiceBased?.()) {
+
+      if (voiceChannel && voiceChannel.isVoiceBased) {
         try {
           const connection = joinVoiceChannel({
-            channelId: DEFAULT_VOICE_CHANNEL_ID,
+            channelId: require('./config').defaultVoiceChannelId,
             guildId: guild.id,
             adapterCreator: guild.voiceAdapterCreator,
             selfDeaf: false,
             selfMute: false
           });
           await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
-          console.log('[VOICE] ✅ Bot connected to default voice channel:', DEFAULT_VOICE_CHANNEL_ID);
+          console.log('[VOICE] Bot connected to default voice channel');
         } catch (e) {
           console.warn('[VOICE] Failed to connect to default channel:', e && e.message);
         }
-      } else {
-        console.warn('[VOICE] Default voice channel not found or not voice-based:', DEFAULT_VOICE_CHANNEL_ID);
       }
     }
   } catch (e) {
     console.warn('[VOICE] Default voice channel initialization failed:', e.message);
   }
-  
-  // Отправляем уведомление о готовности бота в канал логов
+
+  // Send ready notification
   try {
-    const VOICE_LOG_CHANNEL = '1446801072344662149';
-    const ch = await client.channels.fetch(VOICE_LOG_CHANNEL).catch(() => null);
-    if (ch && ch.isTextBased?.()) {
-      const embed = new EmbedBuilder()
-        .setTitle('✅ Бот перезагружен')
-        .setColor(0x4CAF50)
-        .setDescription(`Viht Bot готов к работе`)
-        .addFields(
-          { name: 'Время', value: new Date().toLocaleString('ru-RU'), inline: true },
-          { name: 'Статус', value: '🟢 Online', inline: true }
-        )
-        .setTimestamp();
+    const ch = await client.channels.fetch(require('./config').voiceLogChannelId).catch(() => null);
+    if (ch && ch.isTextBased) {
+      const embed = require('discord.js').EmbedBuilder().setTitle('✅ Бот перезагружен').setColor(0x4CAF50).setDescription(`Viht Bot готов к работе`).addFields(
+        { name: 'Время', value: new Date().toLocaleString('ru-RU'), inline: true },
+        { name: 'Статус', value: '🟢 Online', inline: true }
+      ).setTimestamp();
       await ch.send({ embeds: [embed] }).catch(() => null);
     }
-  } catch (e) { console.warn('Failed to send bot ready notification:', e && e.message); }
-  
-  // Auto-register slash commands if enabled via env
+  } catch (e) {
+    console.warn('Failed to send bot ready notification:', e && e.message);
+  }
+
+  // Auto-register commands
   try {
     const autoReg = process.env.AUTO_REGISTER_COMMANDS === 'true' || process.env.AUTO_REGISTER_COMMANDS === '1';
     if (autoReg) {
@@ -1374,39 +239,33 @@ client.once('ready', async () => {
         if (typeof registerCommands === 'function') {
           await registerCommands();
           console.log('Auto command registration completed.');
-        } else {
-          console.warn('register-commands did not export a function; skipping auto registration');
         }
       } catch (err) {
         console.warn('Auto command registration failed:', err && err.message ? err.message : err);
       }
     }
   } catch (e) { /* ignore */ }
-  // Helper: format date/time in dd.mm.yyyy hh.mm (MSK)
-  function formatDateTimeMSK(ms) {
-    const msk = new Date(ms + 3 * 60 * 60 * 1000);
-    const day = String(msk.getUTCDate()).padStart(2, '0');
-    const month = String(msk.getUTCMonth() + 1).padStart(2, '0');
-    const year = msk.getUTCFullYear();
-    const hours = String(msk.getUTCHours()).padStart(2, '0');
-    const mins = String(msk.getUTCMinutes()).padStart(2, '0');
-    return { date: `${day}.${month}.${year}`, time: `${hours}:${mins}` };
-  }
-  // Helper: get uptime in hours
-  function getUptimeHours() {
-    return Math.floor((Date.now() - botStartTime) / (1000 * 60 * 60));
-  }
-  // Send a polished startup embed into the command/log channel so staff see restarts
+
+  // Startup embed
   try {
-    const logChannelId = COMMAND_LOG_CHANNEL;
+    const logChannelId = require('./config').commandLogChannelId;
     const statusChannel = await client.channels.fetch(logChannelId).catch(() => null);
-    if (statusChannel && statusChannel.isTextBased && statusChannel.isTextBased()) {
+    if (statusChannel && statusChannel.isTextBased) {
+      const formatDateTimeMSK = (ms) => {
+        const msk = new Date(ms + 3 * 60 * 60 * 1000);
+        const day = String(msk.getUTCDate()).padStart(2, '0');
+        const month = String(msk.getUTCMonth() + 1).padStart(2, '0');
+        const year = msk.getUTCFullYear();
+        const hours = String(msk.getUTCHours()).padStart(2, '0');
+        const mins = String(msk.getUTCMinutes()).padStart(2, '0');
+        return { date: `${day}.${month}.${year}`, time: `${hours}:${mins}` };
+      };
       const { date, time } = formatDateTimeMSK(botStartTime);
       let version = 'unknown';
       try { version = (fs.readFileSync(path.join(__dirname, '..', 'VERSION'), 'utf-8') || '').trim() || version; } catch (e) {}
       let gitSha = 'unknown';
       try { const { execSync } = require('child_process'); gitSha = String(execSync('git rev-parse --short HEAD', { cwd: path.join(__dirname, '..'), timeout: 2000 })).trim(); } catch (e) {}
-      const embed = new EmbedBuilder()
+      const embed = require('discord.js').EmbedBuilder()
         .setTitle('✅ Бот запущен')
         .setColor(0x4CAF50)
         .setThumbnail(client.user.displayAvatarURL({ size: 64 }))
@@ -1426,9 +285,10 @@ client.once('ready', async () => {
   } catch (e) {
     console.warn('Failed to post startup embed:', e && e.message ? e.message : e);
   }
-  // Startup reconciliation: restore active mutes and reschedule unmute timers
+
+  // Restore mutes
   try {
-    const MUTE_ROLE_ID = '1445152678706679939';
+    const MUTE_ROLE_ID = require('./config').muteRoleId;
     const mutes = db.get('mutes') || {};
     const now = Date.now();
     for (const [userId, entry] of Object.entries(mutes)) {
@@ -1438,32 +298,27 @@ client.once('ready', async () => {
         const member = await guild.members.fetch(userId).catch(() => null);
         if (!member) continue;
 
-        // Ensure mute role exists and is present
         const mutedRole = guild.roles.cache.get(MUTE_ROLE_ID);
         if (!mutedRole) {
           console.warn(`Mute role ${MUTE_ROLE_ID} not found on guild ${guild.id}, skipping user ${userId}`);
           continue;
         }
 
-        // If mute role is not present, add it
         if (!member.roles.cache.has(MUTE_ROLE_ID)) {
           try { await member.roles.add(MUTE_ROLE_ID); } catch (e) {
             console.warn(`Failed to add mute role to ${userId}:`, e.message);
           }
         }
 
-        // Calculate remaining time and schedule unmute if needed
         if (entry && entry.unmuteTime) {
           const unmuteAt = new Date(entry.unmuteTime).getTime();
           const ms = Math.max(0, unmuteAt - now);
 
           if (ms <= 0) {
-            // Mute has already expired, unmute immediately
             try {
               if (member.roles.cache.has(MUTE_ROLE_ID)) {
                 await member.roles.remove(MUTE_ROLE_ID);
               }
-              // Restore removed roles
               if (entry.removedRoles && entry.removedRoles.length > 0) {
                 const toRestore = entry.removedRoles.filter(id => guild.roles.cache.has(id));
                 if (toRestore.length > 0) {
@@ -1477,7 +332,6 @@ client.once('ready', async () => {
               console.warn(`Failed to unmute expired user ${userId}:`, e.message);
             }
           } else {
-            // Schedule unmute for later
             setTimeout(async () => {
               try {
                 const g = await client.guilds.fetch(entry.guildId).catch(() => null);
@@ -1485,14 +339,12 @@ client.once('ready', async () => {
                 const m = await g.members.fetch(userId).catch(() => null);
                 if (!m) return;
 
-                // Remove mute role
                 if (m.roles.cache.has(MUTE_ROLE_ID)) {
                   try { await m.roles.remove(MUTE_ROLE_ID); } catch (e) {
                     console.warn(`Failed to remove mute role from ${userId}:`, e.message);
                   }
                 }
 
-                // Restore removed roles
                 if (entry.removedRoles && entry.removedRoles.length > 0) {
                   const toRestore = entry.removedRoles.filter(id => g.roles.cache.has(id));
                   if (toRestore.length > 0) {
@@ -1502,7 +354,6 @@ client.once('ready', async () => {
                   }
                 }
 
-                // Remove from mutes DB
                 const current = db.get('mutes') || {};
                 delete current[userId];
                 await db.set('mutes', current);
@@ -1524,41 +375,20 @@ client.once('ready', async () => {
     console.warn('Failed mute reconciliation:', e && e.message ? e.message : e);
   }
 
-  // RULES POSTING DISABLED - commented out to prevent duplicate postings
-  /*
-  try {
-    const RULES_CHANNEL_ID = '1436487842334507058';
-    const rulesRec = db.get('rulesPosted');
-    console.log('Rules check:', { rulesRec });
-   
-    if (!rulesRec) {
-      const channel = await client.channels.fetch(RULES_CHANNEL_ID).catch(() => null);
-      if (channel) {
-        const RULES_TEXT = `📜** Устав Сообщества Viht AI & VPN**\n\n` + "`*Добро пожаловать в наше официальное сообщество! Мы ценим открытость, скорость и взаимное уважение. Соблюдение этих простых правил делает сервер полезным для всех.*`" + `\n\n`;
-        try { if (RULES_TEXT.length <= 1900) await channel.send(RULES_TEXT); else { for (let i=0;i<RULES_TEXT.length;i+=1900) await channel.send(RULES_TEXT.slice(i,i+1900)); } } catch (e) { console.warn('Failed sending rules chunk', e && e.message ? e.message : e); }
-        if (db && db.set) await db.set('rulesPosted', { channelId: RULES_CHANNEL_ID, postedAt: Date.now() });
-      } else {
-        console.warn('Rules channel not found:', RULES_CHANNEL_ID);
-      }
-    }
-  } catch (e) { console.warn('Failed to post rules on ready:', e && e.message ? e.message : e); }
-  */
-  // Refresh welcome message on every startup (delete old, post new)
+  // Refresh welcome message
   try {
     const { sendWelcomeMessage } = require('./roles/reactionRole');
-    const WELCOME_CHANNEL_ID = '1436487788760535143';
+    const WELCOME_CHANNEL_ID = require('./config').welcomeChannelId;
     const welcomeChannel = await client.channels.fetch(WELCOME_CHANNEL_ID).catch(() => null);
-   
+
     if (welcomeChannel) {
       const welcomeRec = db.get('welcome');
-      // If there is an existing saved message, try to edit it instead of deleting
       if (welcomeRec && welcomeRec.messageId) {
         try {
           const oldMsg = await welcomeChannel.messages.fetch(welcomeRec.messageId).catch(() => null);
           if (oldMsg) {
-            // Build the same embed as in sendWelcomeMessage and edit existing message
             const { EmbedBuilder } = require('discord.js');
-            const SUBSCRIBER_ROLE_ID = process.env.SUBSCRIBER_ROLE_ID || '1441744621641400353';
+            const SUBSCRIBER_ROLE_ID = require('./config').subscriberRoleId;
             const embed = new EmbedBuilder()
               .setColor(0xFF006E)
               .setImage('https://media.discordapp.net/attachments/1446801265219604530/1449749530139693166/image_1.jpg?ex=694007f7&is=693eb677&hm=064f42d3b3d9b6c47515e949319c6c62d86d99b950b21d548f94a7ac60faa19a&=&format=webp')
@@ -1567,31 +397,29 @@ client.once('ready', async () => {
             try { await oldMsg.react('✅').catch(() => null); } catch (e) {}
             console.log('Updated existing welcome message:', welcomeRec.messageId);
           } else {
-            // If message doesn't exist, post a fresh one via helper
             await sendWelcomeMessage(client, WELCOME_CHANNEL_ID);
             console.log('Posted new welcome message in', WELCOME_CHANNEL_ID);
           }
         } catch (e) {
-          // fallback to helper if editing fails
-          await sendWelcomeMessage(client, WELCOME_CHANNEL_ID).catch(() => null);
+          await sendWelcomeMessage(client, WELCOME_CHANNEL_ID);
           console.log('Refreshed welcome message in', WELCOME_CHANNEL_ID);
         }
       } else {
-        // No saved message — post new welcome message
         await sendWelcomeMessage(client, WELCOME_CHANNEL_ID);
         console.log('Posted welcome message in', WELCOME_CHANNEL_ID);
       }
-    } else {
-      console.warn('Welcome channel not found:', WELCOME_CHANNEL_ID);
     }
-  } catch (e) { console.warn('Failed to refresh welcome message:', e && e.message ? e.message : e); }
-  // Post or update support panel
+  } catch (e) {
+    console.warn('Failed to refresh welcome message:', e && e.message ? e.message : e);
+  }
+
+  // Post support panel
   try {
-    const SUPPORT_CHANNEL_ID = '1442575929044897792';
+    const SUPPORT_CHANNEL_ID = require('./config').supportChannelId;
     const panelRec = db.get('supportPanelPosted');
-    console.log('Support panel check:', { panelRec });
     const supportChannel = await client.channels.fetch(SUPPORT_CHANNEL_ID).catch(() => null);
     if (!supportChannel) return console.warn('Support channel not found:', SUPPORT_CHANNEL_ID);
+    const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
     const embed = new EmbedBuilder().setTitle('🛠️ Служба поддержки Viht').setColor(0x0066cc).setDescription('Нажмите кнопку ниже, чтобы создать новое обращение в службу поддержки. Пожалуйста, указывайте тему и подробности — это поможет нам быстрее решить вашу проблему.');
     const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('support_create').setLabel('Создать обращение').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('support_close_all').setLabel('Закрыть все обращения (админы)').setStyle(ButtonStyle.Danger));
     if (!panelRec) {
@@ -1604,17 +432,19 @@ client.once('ready', async () => {
       else { const msg = await supportChannel.send({ embeds: [embed], components: [row] }).catch(() => null); if (msg && db && db.set) await db.set('supportPanelPosted', { channelId: SUPPORT_CHANNEL_ID, messageId: msg.id, postedAt: Date.now() }); console.log('Reposted support panel to', SUPPORT_CHANNEL_ID); }
     }
   } catch (e) { console.warn('Failed to post support panel on ready:', e && e.message ? e.message : e); }
-  // Post AI panel in configured AI channel (ensure it exists and is editable)
+
+  // Ensure AI panel
   try {
     const AI_PANEL_KEY = 'aiPanelPosted';
-    const aiChannelId = aiChatChannelId;
+    const aiChannelId = require('./config').aiChatChannelId;
     async function ensureAiPanel() {
       try {
         if (!aiChannelId) return console.warn('aiChatChannelId not configured');
         const aiChannel = await client.channels.fetch(aiChannelId).catch(() => null);
         if (!aiChannel) return console.warn('AI panel channel not found:', aiChannelId);
+        const { createAiPanelEmbed, makeButtons } = require('./ai/aiHandler');
         const embed = createAiPanelEmbed();
-        const row = makeAiButtons();
+        const row = makeButtons();
         const rec = db.get(AI_PANEL_KEY);
         if (rec && rec.channelId === aiChannelId && rec.messageId) {
           const existing = await aiChannel.messages.fetch(rec.messageId).catch(() => null);
@@ -1630,16 +460,17 @@ client.once('ready', async () => {
       } catch (err) { console.warn('ensureAiPanel error', err && err.message ? err.message : err); }
     }
     await ensureAiPanel();
-    // НЕ ставим отдельный интервал - будет в центральном ниже
   } catch (e) { console.warn('Failed to ensure AI panel on ready:', e && e.message ? e.message : e); }
-  // Ensure main navigation menu in menu channel
+
+  // Ensure menu panel
   try {
+    const { ensureMenuPanel } = require('./menus/menuHandler');
     await ensureMenuPanel(client);
-    // НЕ ставим отдельный интервал - будет в центральном ниже
   } catch (e) { console.warn('Failed to ensure menu panel on ready:', e && e.message ? e.message : e); }
-  // After control panel: post price / information panel
+
+  // Post price panel
   try {
-    const PRICE_CHANNEL_ID = '1443194062269321357';
+    const PRICE_CHANNEL_ID = require('./config').priceChannelId;
     const priceKey = 'pricePanelPosted';
     const priceChannel = await client.channels.fetch(PRICE_CHANNEL_ID).catch(() => null);
     if (!priceChannel) {
@@ -1660,47 +491,47 @@ client.once('ready', async () => {
       }
     }
   } catch (e) { console.warn('Failed to post price panel on ready:', e && e.message ? e.message : e); }
-  
-  // Post Music panel with YouTube search
+
+  // Post music panel
   try {
     const { updateMusicPanel } = require('./music/musicHandlers');
     console.log('[MUSIC] Initializing music panel...');
     await updateMusicPanel(client);
-    console.log('[MUSIC] ✅ Music panel posted successfully');
-    // НЕ ставим отдельный интервал - будет в центральном ниже
-  } catch (e) { 
+    console.log('[MUSIC] Music panel posted successfully');
+  } catch (e) {
     console.error('[MUSIC] Failed to post music panel on ready:', e && e.message ? e.message : e);
-    console.error('[MUSIC] Stack:', e?.stack);
   }
-  
-  // Post Post Manager panel
+
+  // Post post manager panel
   try {
+    const { postPostManagerPanel } = require('./post-manager/postManager');
     await postPostManagerPanel(client);
-    // НЕ ставим отдельный интервал - будет в центральном ниже
   } catch (e) { console.warn('Failed to post manager panel on ready:', e && e.message ? e.message : e); }
 
-  // ===== ЦЕНТРАЛЬНЫЙ ИНТЕРВАЛ - обновляет ВСЕ панели один раз каждые 5 минут =====
+  // Central refresh interval
   setInterval(async () => {
     try {
       await ensureAiPanel().catch(e => console.warn('[PANEL] AI error:', e.message));
+      const { ensureMenuPanel } = require('./menus/menuHandler');
       await ensureMenuPanel(client).catch(e => console.warn('[PANEL] Menu error:', e.message));
       const { updateMusicPanel } = require('./music/musicHandlers');
       await updateMusicPanel(client).catch(e => console.warn('[PANEL] Music error:', e.message));
+      const { postPostManagerPanel } = require('./post-manager/postManager');
       await postPostManagerPanel(client).catch(e => console.warn('[PANEL] Manager error:', e.message));
-      
-      // Проверяем что бот всё ещё в войсе отзывов
+
+      // Check voice connection
       try {
         const { joinVoiceChannel, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
-        const DEFAULT_VOICE_CHANNEL_ID = '1449757724274589829';
-        const DEFAULT_GUILD_ID = '1428051812103094282';
-        
+        const DEFAULT_VOICE_CHANNEL_ID = require('./config').defaultVoiceChannelId;
+        const DEFAULT_GUILD_ID = require('./config').defaultGuildId;
+
         const guild = await client.guilds.fetch(DEFAULT_GUILD_ID).catch(() => null);
         if (guild) {
           const botVoiceState = guild.members.me?.voice;
           if (!botVoiceState?.channel || botVoiceState.channel.id !== DEFAULT_VOICE_CHANNEL_ID) {
             console.log('[VOICE] Bot disconnected, reconnecting...');
             const voiceChannel = await guild.channels.fetch(DEFAULT_VOICE_CHANNEL_ID).catch(() => null);
-            if (voiceChannel?.isVoiceBased?.()) {
+            if (voiceChannel?.isVoiceBased) {
               const connection = joinVoiceChannel({
                 channelId: DEFAULT_VOICE_CHANNEL_ID,
                 guildId: guild.id,
@@ -1709,7 +540,7 @@ client.once('ready', async () => {
                 selfMute: false
               });
               await entersState(connection, VoiceConnectionStatus.Ready, 15_000).catch(() => {});
-              console.log('[VOICE] ✅ Bot reconnected to default voice channel');
+              console.log('[VOICE] Bot reconnected to default voice channel');
             }
           }
         }
@@ -1721,22 +552,14 @@ client.once('ready', async () => {
     }
   }, 5 * 60 * 1000);
 });
-// Global safety handlers to avoid process crash on uncaught errors
-process.on('unhandledRejection', (reason, p) => {
-  try { console.error('Unhandled Rejection at:', p, 'reason:', reason); } catch (e) { console.error('Unhandled Rejection', reason); }
-});
-process.on('uncaughtException', (err) => {
-  try { console.error('Uncaught Exception:', err && err.stack ? err.stack : err); } catch (e) { console.error('Uncaught Exception', err); }
-  // do not exit — keep process alive; consider reporting/alerting
-});
-// Graceful shutdown handlers
+
+// Graceful shutdown
 async function gracefulShutdown(signal) {
   try {
     console.log(`[Shutdown] Received ${signal}, logging out client and exiting`);
     if (client && client.user) {
       try { await client.destroy(); } catch (e) { console.warn('Error destroying client', e && e.message); }
     }
-    // allow other cleanup (DB flush) if needed
     process.exit(0);
   } catch (e) {
     console.error('Error during gracefulShutdown', e && e.message ? e.message : e);
@@ -1746,16 +569,14 @@ async function gracefulShutdown(signal) {
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
-// Global error handlers to prevent bot crash
+// Global error handlers
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error && error.message ? error.message : error);
   if (error && error.stack) console.error(error.stack);
-  // Don't exit - let bot continue running
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason && reason.message ? reason.message : reason);
-  // Don't exit - let bot continue running
 });
 
 console.log('🚀 [MAIN] Attempting to login with token...');

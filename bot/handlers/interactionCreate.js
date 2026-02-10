@@ -2,6 +2,7 @@ const { InteractionType } = require('discord.js');
 const { safeReply, safeUpdate, safeShowModal } = require('../libs/interactionUtils');
 const { handleMenuButton } = require('../menus/menuHandler');
 const { handleReviewButton, handleReviewModal } = require('../commands/reviewsHandler');
+const { handleMusicButton } = require('../commands/musicHandler');
 
 module.exports = {
   name: 'interactionCreate',
@@ -71,6 +72,12 @@ async function handleButton(interaction) {
   // Review buttons
   if (customId && customId.startsWith('review_')) {
     try { await handleReviewButton(interaction); } catch (err) { console.error('Review button error', err); await safeReply(interaction, { content: 'Ошибка при обработке отзыва.', ephemeral: true }); }
+    return;
+  }
+
+  // Music buttons
+  if (customId && customId.startsWith('music_')) {
+    try { await handleMusicButton(interaction); } catch (err) { console.error('Music button error', err); await safeReply(interaction, { content: 'Ошибка музыки.', ephemeral: true }); }
     return;
   }
 }

@@ -146,6 +146,12 @@ client.once('ready', async () => {
     await ensureRulesPanel(client);
   } catch (e) { console.warn('Failed to ensure rules panel on ready:', e && e.message ? e.message : e); }
 
+  // Ensure music panel
+  try {
+    const { ensureMusicPanel } = require('./commands/musicHandler');
+    await ensureMusicPanel(client);
+  } catch (e) { console.warn('Failed to ensure music panel on ready:', e && e.message ? e.message : e); }
+
   // Central refresh interval
   setInterval(async () => {
     try {
@@ -157,6 +163,9 @@ client.once('ready', async () => {
 
       const { ensureRulesPanel } = require('./commands/rulesHandler');
       await ensureRulesPanel(client).catch(e => console.warn('[PANEL] Rules error:', e.message));
+
+      const { ensureMusicPanel } = require('./commands/musicHandler');
+      await ensureMusicPanel(client).catch(e => console.warn('[PANEL] Music error:', e.message));
     } catch (e) {
       console.error('[PANEL] Central refresh error:', e.message);
     }

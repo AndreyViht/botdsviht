@@ -21,6 +21,9 @@ const config = {
 
   // Welcome Log (New)
   welcomeLogChannelId: '1470894200428957778',
+
+  // Audit Log
+  auditLogChannelId: '1470897162614214738',
 };
 
 module.exports = config;

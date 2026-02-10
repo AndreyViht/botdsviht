@@ -94,7 +94,7 @@ module.exports = {
     }
 
     await interaction.reply({ 
-      content: `🎭 **${interaction.user.username}** ${cmdData.action} **${targetUser.username}**!` 
+      content: `🎭 <@${interaction.user.id}> ${cmdData.action} <@${targetUser.id}>!` 
     });
   }
 };

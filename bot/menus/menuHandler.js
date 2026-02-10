@@ -77,8 +77,7 @@ async function handleMenuButton(interaction) {
     if (id === 'menu_ds') {
       const e = new EmbedBuilder().setTitle('💬 DS Viht').setColor(0x5865F2).setDescription('Полезные ссылки сервера:');
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setURL('https://discord.com/channels/1428051812103094282/1448411376291938336').setLabel('🗣️ Флудилка').setStyle(ButtonStyle.Link),
-        new ButtonBuilder().setURL('https://discord.com/channels/1428051812103094282/1442575929044897792').setLabel('🛠️ Поддержка').setStyle(ButtonStyle.Link)
+        new ButtonBuilder().setURL('https://discord.com/channels/1428051812103094282/1470872101580832982').setLabel('🗣️ Флудилка').setStyle(ButtonStyle.Link)
       );
       await safeUpdate(interaction, { embeds: [e], components: [row, ...makeBackRow()] });
       return;

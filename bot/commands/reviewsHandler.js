@@ -163,55 +163,78 @@ async function handleReviewModal(interaction) {
 }
 
 async function handleModerationAction(interaction) {
-  const action = interaction.customId.startsWith('review_approve_') ? 'approve' : 'reject';
-  const reviewId = interaction.customId.split('_')[2];
+  try {
+    const action = interaction.customId.startsWith('review_approve_') ? 'approve' : 'reject';
+    const reviewId = interaction.customId.split('_')[2];
 
-  const reviews = db.get('reviews') || [];
-  const reviewIndex = reviews.findIndex(r => r.id === reviewId);
+    let reviews = [];
+    try {
+      reviews = db.get('reviews');
+      if (!Array.isArray(reviews)) reviews = [];
+    } catch (e) { reviews = []; }
 
-  if (reviewIndex === -1) {
-    return interaction.reply({ content: '❌ Отзыв не найден.', ephemeral: true });
-  }
+    const reviewIndex = reviews.findIndex(r => r.id === reviewId);
 
-  const review = reviews[reviewIndex];
-
-  if (action === 'reject') {
-    reviews[reviewIndex].status = 'rejected';
-    await db.set('reviews', reviews);
-    await interaction.update({ content: `❌ Отзыв от ${review.userTag} отклонен.`, components: [], embeds: [] });
-  } else {
-    reviews[reviewIndex].status = 'approved';
-    await db.set('reviews', reviews);
-
-    // Publish to public channel
-    const logChannel = await interaction.client.channels.fetch(config.reviewsLogChannelId).catch(() => null);
-    if (logChannel) {
-      const embed = new EmbedBuilder()
-        .setTitle('🌟 Новый отзыв!')
-        .setColor(0x00BFFF)
-        .setAuthor({ name: review.userTag, iconURL: interaction.user.displayAvatarURL() }) // Note: might need fetch user for avatar if interaction user != author
-        .setDescription(review.text)
-        .setFooter({ text: 'Спасибо за ваш отзыв!' })
-        .setTimestamp();
-
-      // Try to fetch original author for avatar
-      try {
-        const author = await interaction.client.users.fetch(review.userId);
-        embed.setAuthor({ name: author.tag, iconURL: author.displayAvatarURL() });
-      } catch (e) {}
-
-      await logChannel.send({ embeds: [embed] });
-
-      // Update channel name counter
-      try {
-        const approvedCount = reviews.filter(r => r.status === 'approved').length;
-        await logChannel.setName(`├・📃・все-отзывы-${approvedCount}`);
-      } catch (e) {
-        console.warn('Failed to update review channel name:', e.message);
-      }
+    if (reviewIndex === -1) {
+      return interaction.reply({ content: '❌ Отзыв не найден в базе данных.', ephemeral: true });
     }
 
-    await interaction.update({ content: `✅ Отзыв от ${review.userTag} опубликован.`, components: [], embeds: [] });
+    const review = reviews[reviewIndex];
+
+    if (action === 'reject') {
+      reviews[reviewIndex].status = 'rejected';
+      await db.set('reviews', reviews);
+      await interaction.update({ content: `❌ Отзыв от **${review.userTag}** отклонен модератором.`, components: [], embeds: [] });
+    } else {
+      // Approve logic
+      reviews[reviewIndex].status = 'approved';
+      await db.set('reviews', reviews);
+
+      // Publish to public channel
+      const logChannel = await interaction.client.channels.fetch(config.reviewsLogChannelId).catch(() => null);
+      if (logChannel) {
+        const embed = new EmbedBuilder()
+          .setTitle('🌟 Новый отзыв!')
+          .setColor(0x00BFFF)
+          .setDescription(review.text)
+          .setFooter({ text: 'Спасибо за ваш отзыв!' })
+          .setTimestamp();
+
+        // Try to fetch original author for avatar and mention
+        try {
+          const author = await interaction.client.users.fetch(review.userId);
+          embed.setAuthor({ name: author.tag, iconURL: author.displayAvatarURL() });
+          // Option: mention user in description or field
+          embed.addFields({ name: 'Автор', value: `<@${review.userId}>`, inline: true });
+        } catch (e) {
+          embed.setAuthor({ name: review.userTag });
+        }
+
+        await logChannel.send({ embeds: [embed] });
+
+        // Update channel name counter
+        try {
+          const approvedCount = reviews.filter(r => r.status === 'approved').length;
+          const newName = `├・📃・все-отзывы-${approvedCount}`;
+          if (logChannel.name !== newName) {
+            await logChannel.setName(newName);
+          }
+        } catch (e) {
+          console.warn('[REVIEWS] Failed to update channel name (rate limit?):', e.message);
+        }
+      }
+
+      await interaction.update({ content: `✅ Отзыв от **${review.userTag}** успешно опубликован!`, components: [], embeds: [] });
+    }
+  } catch (err) {
+    console.error('handleModerationAction fatal error:', err);
+    try {
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: `❌ Ошибка при модерации: ${err.message}`, ephemeral: true });
+      } else {
+        await interaction.followUp({ content: `❌ Ошибка при выполнении: ${err.message}`, ephemeral: true });
+      }
+    } catch (e) {}
   }
 }
 

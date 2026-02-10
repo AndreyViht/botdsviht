@@ -59,36 +59,51 @@ async function ensureReviewPanel(client) {
 }
 
 async function handleReviewButton(interaction) {
-  if (interaction.customId === 'review_create') {
-    // Check if user already has an approved review
-    const reviews = db.get('reviews') || [];
-    const existing = reviews.find(r => r.userId === interaction.user.id && r.status === 'approved');
-    
-    if (existing) {
-      return interaction.reply({ 
-        content: '🚫 Твой отзыв уже есть, мы не накручиваем так что спасибо вам за ваш отзыв.', 
-        ephemeral: true 
-      });
+  try {
+    if (interaction.customId === 'review_create') {
+      // Check if user already has an approved review
+      let reviews = [];
+      try {
+        reviews = db.get('reviews');
+        if (!Array.isArray(reviews)) reviews = [];
+      } catch (e) {
+        console.error('Error reading reviews from DB:', e);
+        reviews = [];
+      }
+      
+      const existing = reviews.find(r => r.userId === interaction.user.id && r.status === 'approved');
+      
+      if (existing) {
+        return interaction.reply({ 
+          content: '🚫 Твой отзыв уже есть, мы не накручиваем так что спасибо вам за ваш отзыв.', 
+          ephemeral: true 
+        });
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId('review_modal')
+        .setTitle('Ваш отзыв');
+
+      const input = new TextInputBuilder()
+        .setCustomId('review_text')
+        .setLabel('Напишите ваш отзыв')
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('Расскажите о вашем опыте...')
+        .setRequired(true)
+        .setMaxLength(1000);
+
+      const row = new ActionRowBuilder().addComponents(input);
+      modal.addComponents(row);
+
+      await interaction.showModal(modal);
+    } else if (interaction.customId.startsWith('review_approve_') || interaction.customId.startsWith('review_reject_')) {
+      await handleModerationAction(interaction);
     }
-
-    const modal = new ModalBuilder()
-      .setCustomId('review_modal')
-      .setTitle('Ваш отзыв');
-
-    const input = new TextInputBuilder()
-      .setCustomId('review_text')
-      .setLabel('Напишите ваш отзыв')
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Расскажите о вашем опыте...')
-      .setRequired(true)
-      .setMaxLength(1000);
-
-    const row = new ActionRowBuilder().addComponents(input);
-    modal.addComponents(row);
-
-    await interaction.showModal(modal);
-  } else if (interaction.customId.startsWith('review_approve_') || interaction.customId.startsWith('review_reject_')) {
-    await handleModerationAction(interaction);
+  } catch (err) {
+    console.error('handleReviewButton fatal error:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: `Debug Error: ${err.message}`, ephemeral: true });
+    }
   }
 }
 

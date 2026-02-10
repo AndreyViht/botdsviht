@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const db = require('../libs/db');
 
 const SUBSCRIBER_ROLE_ID = process.env.SUBSCRIBER_ROLE_ID || '1441744621641400353';
@@ -14,24 +14,29 @@ async function sendWelcomeMessage(client, channelId) {
   // Check bot permissions in the channel and fail gracefully if missing
   const botMember = channel.guild?.members?.cache?.get(client.user.id) || await channel.guild?.members?.fetch(client.user.id).catch(() => null);
   const perms = channel.permissionsFor ? channel.permissionsFor(botMember || client.user) : null;
-  const needed = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'AddReactions', 'ReadMessageHistory'];
+  const needed = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'ReadMessageHistory'];
   const missing = perms ? needed.filter(p => !perms.has(p)) : needed;
   if (missing.length) {
     console.warn('Missing channel permissions for welcome message:', missing.join(', '), 'Channel:', channelId);
-    // do not throw — fail gracefully so bot remains up
     return null;
   }
 
   const embed = new EmbedBuilder()
     .setColor(0xFF006E)
     .setImage('https://media.discordapp.net/attachments/1446801265219604530/1449749530139693166/image_1.jpg?ex=694007f7&is=693eb677&hm=064f42d3b3d9b6c47515e949319c6c62d86d99b950b21d548f94a7ac60faa19a&=&format=webp')
-    .setFooter({ text: '💡 Нажми ✅ для входа, убери галочку для выхода' });
+    .setFooter({ text: '💡 Нажми кнопку ниже для верификации' });
+
+  const row = new ActionRowBuilder()
+    .addComponents(
+      new ButtonBuilder()
+        .setCustomId('verify_start')
+        .setLabel('Проверка на бота')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('✅')
+    );
 
   try {
-    const msg = await channel.send({ embeds: [embed] });
-    // Try to react; if it fails (permissions), log but don't throw
-    try { await msg.react('✅'); } catch (e) { console.warn('Could not add reaction to welcome message:', e.message || e); }
-    // save message id to db so we can track reactions
+    const msg = await channel.send({ embeds: [embed], components: [row] });
     if (db && db.set) await db.set('welcome', { channelId, messageId: msg.id });
     return msg.id;
   } catch (err) {
@@ -60,10 +65,7 @@ async function sendAnnouncement(client, member, action) {
 
     const color = action === 'add' ? 0x00AE86 : 0xE74C3C;
     const title = action === 'add' ? `🎉 Роль выдана` : `❌ Роль удалена`;
-    const desc = action === 'add' 
-      ? `Пользователь ${member.user.tag} получил роль <@&${SUBSCRIBER_ROLE_ID}>`
-      : `Пользователь ${member.user.tag} удалил роль <@&${SUBSCRIBER_ROLE_ID}>`;
-
+    
     const embed = new EmbedBuilder()
       .setTitle(title)
       .setColor(color)
@@ -80,100 +82,76 @@ async function sendAnnouncement(client, member, action) {
   }
 }
 
-// Handle reaction add (✅ adds role)
-async function handleReactionAdd(reaction, user) {
+async function handleVerificationButton(interaction) {
+  if (interaction.customId !== 'verify_start') return;
+
+  const code = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digit code
+
+  const modal = new ModalBuilder()
+    .setCustomId(`verify_modal_${code}`)
+    .setTitle(`Проверочный код: ${code}`);
+
+  const input = new TextInputBuilder()
+    .setCustomId('verify_input')
+    .setLabel(`Введите код: ${code}`)
+    .setPlaceholder(code)
+    .setStyle(TextInputStyle.Short)
+    .setMinLength(4)
+    .setMaxLength(4)
+    .setRequired(true);
+
+  const row = new ActionRowBuilder().addComponents(input);
+  modal.addComponents(row);
+
+  await interaction.showModal(modal);
+}
+
+async function handleVerificationModal(interaction) {
+  if (!interaction.customId.startsWith('verify_modal_')) return;
+
+  const expectedCode = interaction.customId.split('_')[2];
+  const inputCode = interaction.fields.getTextInputValue('verify_input');
+
+  if (inputCode !== expectedCode) {
+    await interaction.reply({ content: '❌ Неверный код. Попробуйте снова.', ephemeral: true });
+    return;
+  }
+
+  const member = interaction.member;
+  if (!member) {
+     await interaction.reply({ content: '❌ Ошибка: пользователь не найден.', ephemeral: true });
+     return;
+  }
+
+  const role = interaction.guild.roles.cache.get(SUBSCRIBER_ROLE_ID);
+  if (!role) {
+    await interaction.reply({ content: '❌ Ошибка конфигурации: роль не найдена.', ephemeral: true });
+    return;
+  }
+
+  if (member.roles.cache.has(SUBSCRIBER_ROLE_ID)) {
+      await interaction.reply({ content: '✅ У вас уже есть эта роль!', ephemeral: true });
+      return;
+  }
+
   try {
-    if (user.bot) return;
-    if (reaction.message.partial) await reaction.message.fetch();
-    
-    // Check if this is in the welcome channel
-    const rec = (db && db.get) ? db.get('welcome') : null;
-    if (!rec) return;
-    const onSavedMessage = (reaction.message.id === rec.messageId);
-    const inWelcomeChannel = (String(reaction.message.channel.id) === String(rec.channelId));
-    if (!onSavedMessage && !inWelcomeChannel) return;
-    
-    // Only handle ✅ emoji
-    if (reaction.emoji.name !== '✅') return;
-    
-    const guild = reaction.message.guild;
-    const member = await guild.members.fetch(user.id).catch(() => null);
-    if (!member) {
-      console.warn('Could not fetch member:', user.id);
-      return;
-    }
-
-    const role = guild.roles.cache.get(SUBSCRIBER_ROLE_ID) || await guild.roles.fetch(SUBSCRIBER_ROLE_ID).catch(() => null);
-    if (!role) {
-      console.warn('Subscriber role not found:', SUBSCRIBER_ROLE_ID);
-      try { await reaction.message.channel.send(`Роль <@&${SUBSCRIBER_ROLE_ID}> не найдена.`).catch(() => null); } catch (e) { /* ignore */ }
-      return;
-    }
-
-    // Check role hierarchy
-    const botMember = await guild.members.fetch(reaction.message.client.user.id).catch(() => null);
-    const botHighestPos = botMember?.roles?.highest?.position ?? -1;
-    const targetPos = role.position ?? -1;
-    if (botHighestPos <= targetPos) {
-      console.warn(`Bot role position (${botHighestPos}) <= target role position (${targetPos}), cannot assign`);
-      try { await reaction.message.channel.send(`Роль бота ниже по иерархии. Поднимите роль бота выше роли <@&${SUBSCRIBER_ROLE_ID}>.`).catch(() => null); } catch (e) { /* ignore */ }
-      return;
-    }
-
-    // Add role (no matter what roles they already have)
-    try {
-      await member.roles.add(role).catch(e => { throw e; });
-      console.log(`[Role Add] ${user.tag} (${user.id}) - added role ${SUBSCRIBER_ROLE_ID}`);
-      await sendAnnouncement(reaction.message.client, member, 'add').catch(() => null);
-    } catch (err) {
-      console.error(`[Role Add Failed] ${user.tag} - Error:`, err && err.message ? err.message : err);
-      try { await reaction.message.channel.send(`Не удалось выдать роль <@&${SUBSCRIBER_ROLE_ID}>.`).catch(() => null); } catch (e) { /* ignore */ }
-    }
+    await member.roles.add(role);
+    await interaction.reply({ content: '✅ Вы успешно прошли проверку! Роль выдана.', ephemeral: true });
+    await sendAnnouncement(interaction.client, member, 'add');
   } catch (err) {
-    console.error('handleReactionAdd error', err);
+    console.error('Failed to give role:', err);
+    await interaction.reply({ content: '❌ Не удалось выдать роль. Проверьте права бота.', ephemeral: true });
   }
 }
 
-// Handle reaction remove (❌ removes role)
-async function handleReactionRemove(reaction, user) {
-  try {
-    if (user.bot) return;
-    if (reaction.message.partial) await reaction.message.fetch();
+// Deprecated reaction handlers (kept for compatibility with index.js)
+async function handleReactionAdd(reaction, user) { return; }
+async function handleReactionRemove(reaction, user) { return; }
 
-    // Check if this is in the welcome channel
-    const rec = (db && db.get) ? db.get('welcome') : null;
-    if (!rec) return;
-    const onSavedMessage = (reaction.message.id === rec.messageId);
-    const inWelcomeChannel = (String(reaction.message.channel.id) === String(rec.channelId));
-    if (!onSavedMessage && !inWelcomeChannel) return;
-
-    // Handle both ✅ and ❌ for removal
-    if (reaction.emoji.name !== '✅') return;
-
-    const guild = reaction.message.guild;
-    const member = await guild.members.fetch(user.id).catch(() => null);
-    if (!member) {
-      console.warn('Could not fetch member:', user.id);
-      return;
-    }
-
-    const role = guild.roles.cache.get(SUBSCRIBER_ROLE_ID) || await guild.roles.fetch(SUBSCRIBER_ROLE_ID).catch(() => null);
-    if (!role) {
-      console.warn('Subscriber role not found:', SUBSCRIBER_ROLE_ID);
-      return;
-    }
-
-    // Remove role if they have it
-    try {
-      await member.roles.remove(role).catch(e => { throw e; });
-      console.log(`[Role Remove] ${user.tag} (${user.id}) - removed role ${SUBSCRIBER_ROLE_ID}`);
-      await sendAnnouncement(reaction.message.client, member, 'remove').catch(() => null);
-    } catch (err) {
-      console.error(`[Role Remove Failed] ${user.tag} - Error:`, err && err.message ? err.message : err);
-    }
-  } catch (err) {
-    console.error('handleReactionRemove error', err);
-  }
-}
-
-module.exports = { sendWelcomeMessage, handleReactionAdd, handleReactionRemove };
+module.exports = { 
+  sendWelcomeMessage, 
+  handleReactionAdd, 
+  handleReactionRemove,
+  handleVerificationButton,
+  handleVerificationModal
+};

@@ -433,34 +433,14 @@ client.once('ready', async () => {
     }
   } catch (e) { console.warn('Failed to post support panel on ready:', e && e.message ? e.message : e); }
 
-  // Ensure AI panel
-  try {
-    const AI_PANEL_KEY = 'aiPanelPosted';
-    const aiChannelId = require('./config').aiChatChannelId;
-    async function ensureAiPanel() {
-      try {
-        if (!aiChannelId) return console.warn('aiChatChannelId not configured');
-        const aiChannel = await client.channels.fetch(aiChannelId).catch(() => null);
-        if (!aiChannel) return console.warn('AI panel channel not found:', aiChannelId);
-        const { createAiPanelEmbed, makeButtons } = require('./ai/aiHandler');
-        const embed = createAiPanelEmbed();
-        const row = makeButtons();
-        const rec = db.get(AI_PANEL_KEY);
-        if (rec && rec.channelId === aiChannelId && rec.messageId) {
-          const existing = await aiChannel.messages.fetch(rec.messageId).catch(() => null);
-          if (existing) {
-            await existing.edit({ embeds: [embed], components: row }).catch(() => null);
-            console.log('Updated existing AI panel message');
-            return;
-          }
-        }
-        const msg = await aiChannel.send({ embeds: [embed], components: row }).catch(() => null);
-        if (msg && db && db.set) await db.set(AI_PANEL_KEY, { channelId: aiChannelId, messageId: msg.id, postedAt: Date.now() });
-        console.log('Posted AI panel to', aiChannelId);
-      } catch (err) { console.warn('ensureAiPanel error', err && err.message ? err.message : err); }
-    }
-    await ensureAiPanel();
-  } catch (e) { console.warn('Failed to ensure AI panel on ready:', e && e.message ? e.message : e); }
+  // Ensure AI panel (Disabled)
+  // try {
+  //   const AI_PANEL_KEY = 'aiPanelPosted';
+  //   const aiChannelId = require('./config').aiChatChannelId;
+  //   async function ensureAiPanel() {
+  //      // AI functionality disabled
+  //   }
+  // } catch (e) { }
 
   // Ensure menu panel
   try {
@@ -511,7 +491,7 @@ client.once('ready', async () => {
   // Central refresh interval
   setInterval(async () => {
     try {
-      await ensureAiPanel().catch(e => console.warn('[PANEL] AI error:', e.message));
+      // await ensureAiPanel().catch(e => console.warn('[PANEL] AI error:', e.message));
       const { ensureMenuPanel } = require('./menus/menuHandler');
       await ensureMenuPanel(client).catch(e => console.warn('[PANEL] Menu error:', e.message));
       const { updateMusicPanel } = require('./music/musicHandlers');

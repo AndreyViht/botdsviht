@@ -6,7 +6,7 @@ const config = {
   clientId: process.env.CLIENT_ID,
   guildId: process.env.GUILD_ID,
   welcomeChannelId: process.env.WELCOME_CHANNEL_ID || null,
-  aiChatChannelId: process.env.AI_CHAT_CHANNEL_ID || '1437189999882801173',
+  // aiChatChannelId removed
   announceChannelId: process.env.ANNOUNCE_CHANNEL_ID || '1436487981723680930',
   musicLogChannelId: process.env.MUSIC_LOG_CHANNEL_ID || process.env.ANNOUNCE_CHANNEL_ID || '1436487981723680930',
   vkChartUrl: process.env.VK_CHART_URL || null,

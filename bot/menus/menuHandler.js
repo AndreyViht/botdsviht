@@ -21,23 +21,9 @@ function makeMainEmbed() {
 function mainRow() {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('menu_rules').setLabel('📜 Правила').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('menu_news').setLabel('📰 Новости').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('menu_chat').setLabel('💬 Общение').setStyle(ButtonStyle.Secondary)
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('menu_ai').setLabel('🤖 Инструкция по ИИ').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('menu_gallery').setLabel('🖼️ Галерея').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('menu_vihtapi').setLabel('🔗 viht-api').setStyle(ButtonStyle.Success)
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('menu_suggestions').setLabel('💡 Предложения').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('menu_price').setLabel('💲 Прайс/Заказать бота').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('menu_music').setLabel('🎧 Запустить радио/музыку').setStyle(ButtonStyle.Secondary)
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('menu_support').setLabel('🛠️ Поддержка').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setURL('https://vihtai.pro').setLabel('🔐 Подключить VPN (vihtai.pro)').setStyle(ButtonStyle.Link)
+      new ButtonBuilder().setCustomId('menu_vpn').setLabel('🌐 VPN').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('menu_ds').setLabel('💬 DS Viht').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('menu_goods').setLabel('🛍️ Товары').setStyle(ButtonStyle.Secondary)
     )
   ];
 }
@@ -77,75 +63,29 @@ async function handleMenuButton(interaction) {
       return;
     }
 
-    if (id === 'menu_rules') {
-      const e = new EmbedBuilder().setTitle('📜 Правила сообщества').setColor(0xffc107).setDescription('Ознакомьтесь с полными правилами по ссылке ниже. Пожалуйста, уважайте других участников.');
-      e.addFields({ name: 'Ссылка', value: '[Правила](https://discord.com/channels/1428051812103094282/1436487842334507058)' });
-      await safeUpdate(interaction, { embeds: [e], components: makeBackRow() });
-      return;
-    }
-
-    if (id === 'menu_news') {
-      const e = new EmbedBuilder().setTitle('📰 Новости сервера').setColor(0x00aced).setDescription('Свежие объявления и релизы. Следите за обновлениями!');
-      e.addFields({ name: 'Ссылка', value: '[Новости](https://discord.com/channels/1428051812103094282/1436487931081523384)' });
-      await safeUpdate(interaction, { embeds: [e], components: makeBackRow() });
-      return;
-    }
-
-    if (id === 'menu_chat') {
-      const e = new EmbedBuilder().setTitle('💬 Общение').setColor(0x2ecc71).setDescription('Здесь можно просто общаться, делиться идеями и знакомиться с другими участниками.');
-      e.addFields({ name: 'Ссылка', value: '[Общение](https://discord.com/channels/1428051812103094282/1437190736649916456)' });
-      await safeUpdate(interaction, { embeds: [e], components: makeBackRow() });
-      return;
-    }
-
-    if (id === 'menu_ai') {
-      const e = new EmbedBuilder().setTitle('🤖 Инструкция по использованию ИИ').setColor(0x9b59b6).setDescription('Использовать ИИ могут участники с ролью **Пользователь**.\n\nКак это работает:\n1) Нажмите «Начать чат», бот создаст приватную ветку (thread) видимую только вам и роли модераторов.\n2) В ветке вы общаетесь с ИИ — создавайте новые сообщения, ИИ отвечает в ту же ветку.\n3) Управление: закрыть ветку, удалить историю или создать новую — доступны в кнопках ИИ.');
+    if (id === 'menu_vpn') {
+      const e = new EmbedBuilder().setTitle('🌐 Viht VPN').setColor(0x00AE86).setDescription('Безопасный и быстрый VPN. Выберите действие:');
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setURL('https://discord.com/channels/1428051812103094282/1437189999882801173').setLabel('Начать чат').setStyle(ButtonStyle.Link),
-        new ButtonBuilder().setCustomId('menu_main').setLabel('◀️ Назад').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setURL('https://t.me/VihtVPNbot').setLabel('🤖 Бот для VPN').setStyle(ButtonStyle.Link),
+        new ButtonBuilder().setURL('https://vihtai.pro/').setLabel('🌍 Сайт').setStyle(ButtonStyle.Link),
+        new ButtonBuilder().setURL('https://vihtai.pro/instructions').setLabel('📄 Инструкции').setStyle(ButtonStyle.Link)
       );
-      await safeUpdate(interaction, { embeds: [e], components: [row] });
+      await safeUpdate(interaction, { embeds: [e], components: [row, ...makeBackRow()] });
       return;
     }
 
-    if (id === 'menu_gallery') {
-      const e = new EmbedBuilder().setTitle('🖼️ Галерея работ').setColor(0xf39c12).setDescription('Фотографии, примеры работ и вдохновение. Доступно для роли **Пользователь**.');
-      e.addFields({ name: 'Ссылка', value: '[Галерея](https://discord.com/channels/1428051812103094282/1437190052638888036)' });
-      await safeUpdate(interaction, { embeds: [e], components: makeBackRow() });
+    if (id === 'menu_ds') {
+      const e = new EmbedBuilder().setTitle('💬 DS Viht').setColor(0x5865F2).setDescription('Полезные ссылки сервера:');
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setURL('https://discord.com/channels/1428051812103094282/1448411376291938336').setLabel('🗣️ Флудилка').setStyle(ButtonStyle.Link),
+        new ButtonBuilder().setURL('https://discord.com/channels/1428051812103094282/1442575929044897792').setLabel('🛠️ Поддержка').setStyle(ButtonStyle.Link)
+      );
+      await safeUpdate(interaction, { embeds: [e], components: [row, ...makeBackRow()] });
       return;
     }
 
-    if (id === 'menu_vihtapi') {
-      const e = new EmbedBuilder().setTitle('🔗 viht-api и интеграции').setColor(0x3498db).setDescription('Информация о интеграции ИИ, VPN, Telegram и сайте.' );
-      e.addFields({ name: 'Ссылка', value: '[viht-api](https://discord.com/channels/1428051812103094282/1437190113187594322)' });
-      await safeUpdate(interaction, { embeds: [e], components: makeBackRow() });
-      return;
-    }
-
-    if (id === 'menu_suggestions') {
-      const e = new EmbedBuilder().setTitle('💡 Канал предложений').setColor(0x1abc9c).setDescription('Делитесь идеями по улучшению бота и сервера. Писать могут пользователи с ролью **Пользователь**.');
-      e.addFields({ name: 'Ссылка', value: '[Предложения](https://discord.com/channels/1428051812103094282/1437190638071447644)' });
-      await safeUpdate(interaction, { embeds: [e], components: makeBackRow() });
-      return;
-    }
-
-    if (id === 'menu_price') {
-      const e = new EmbedBuilder().setTitle('💲 Прайс / Заказать бота').setColor(0xe67e22).setDescription('Хотите такого же бота? Здесь описаны условия и цены.');
-      e.addFields({ name: 'Ссылка', value: '[Прайс / Заказать](https://discord.com/channels/1428051812103094282/1443194062269321357)' });
-      await safeUpdate(interaction, { embeds: [e], components: makeBackRow() });
-      return;
-    }
-
-    if (id === 'menu_music') {
-      const e = new EmbedBuilder().setTitle('🎧 Радио и музыка в голосе').setColor(0x8e44ad).setDescription('Управление запуском радио и собственной музыки доступно в панели.');
-      e.addFields({ name: 'Ссылка', value: '[Панель управления музыкой](https://discord.com/channels/1428051812103094282/1443194196172476636)' });
-      await safeUpdate(interaction, { embeds: [e], components: makeBackRow() });
-      return;
-    }
-
-    if (id === 'menu_support') {
-      const e = new EmbedBuilder().setTitle('🛠️ Поддержка Viht').setColor(0xcc0000).setDescription('Если нужна помощь — создайте обращение в службе поддержки.');
-      e.addFields({ name: 'Ссылка', value: '[Поддержка](https://discord.com/channels/1428051812103094282/1442575929044897792)' });
+    if (id === 'menu_goods') {
+      const e = new EmbedBuilder().setTitle('🛍️ Товары').setColor(0xFFA500).setDescription('Этот раздел скоро появится! Следите за новостями.');
       await safeUpdate(interaction, { embeds: [e], components: makeBackRow() });
       return;
     }

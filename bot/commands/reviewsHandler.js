@@ -108,44 +108,58 @@ async function handleReviewButton(interaction) {
 }
 
 async function handleReviewModal(interaction) {
-  if (interaction.customId !== 'review_modal') return;
+  try {
+    if (interaction.customId !== 'review_modal') return;
 
-  const text = interaction.fields.getTextInputValue('review_text');
-  const reviewId = Date.now().toString();
+    const text = interaction.fields.getTextInputValue('review_text');
+    const reviewId = Date.now().toString();
 
-  // Save pending review
-  const reviews = db.get('reviews') || [];
-  reviews.push({
-    id: reviewId,
-    userId: interaction.user.id,
-    userTag: interaction.user.tag,
-    text: text,
-    status: 'pending',
-    createdAt: Date.now()
-  });
-  await db.set('reviews', reviews);
+    // Save pending review
+    let reviews = [];
+    try {
+      reviews = db.get('reviews');
+      if (!Array.isArray(reviews)) reviews = [];
+    } catch (e) { reviews = []; }
 
-  // Send to moderation channel
-  const modChannel = await interaction.client.channels.fetch(config.reviewsModerationChannelId).catch(() => null);
-  if (modChannel) {
-    const embed = new EmbedBuilder()
-      .setTitle('🆕 Новый отзыв на модерацию')
-      .setColor(0xFFA500)
-      .addFields(
-        { name: 'Пользователь', value: `${interaction.user.tag} (<@${interaction.user.id}>)` },
-        { name: 'Текст отзыва', value: text }
-      )
-      .setTimestamp();
+    reviews.push({
+      id: reviewId,
+      userId: interaction.user.id,
+      userTag: interaction.user.tag,
+      text: text,
+      status: 'pending',
+      createdAt: Date.now()
+    });
+    await db.set('reviews', reviews);
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`review_approve_${reviewId}`).setLabel('Опубликовать').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`review_reject_${reviewId}`).setLabel('Отказать').setStyle(ButtonStyle.Danger)
-    );
+    // Send to moderation channel
+    const modChannel = await interaction.client.channels.fetch(config.reviewsModerationChannelId).catch(() => null);
+    if (modChannel) {
+      const embed = new EmbedBuilder()
+        .setTitle('🆕 Новый отзыв на модерацию')
+        .setColor(0xFFA500)
+        .addFields(
+          { name: 'Пользователь', value: `${interaction.user.tag} (<@${interaction.user.id}>)` },
+          { name: 'Текст отзыва', value: text }
+        )
+        .setTimestamp();
 
-    await modChannel.send({ embeds: [embed], components: [row] });
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`review_approve_${reviewId}`).setLabel('Опубликовать').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`review_reject_${reviewId}`).setLabel('Отказать').setStyle(ButtonStyle.Danger)
+      );
+
+      await modChannel.send({ embeds: [embed], components: [row] });
+    } else {
+      console.warn('Review moderation channel not found:', config.reviewsModerationChannelId);
+    }
+
+    await interaction.reply({ content: '✅ Ваш отзыв отправлен на модерацию. Спасибо!', ephemeral: true });
+  } catch (err) {
+    console.error('handleReviewModal error:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: '❌ Ошибка при отправке отзыва. Попробуйте позже.', ephemeral: true });
+    }
   }
-
-  await interaction.reply({ content: '✅ Ваш отзыв отправлен на модерацию. Спасибо!', ephemeral: true });
 }
 
 async function handleModerationAction(interaction) {

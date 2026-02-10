@@ -37,7 +37,14 @@ if (fs.existsSync(commandsPath)) {
   for (const file of commandFiles) {
     try {
       const command = require(path.join(commandsPath, file));
-      if (command.data && command.execute) client.commands.set(command.data.name, command);
+      if (command.data && command.execute) {
+         if (Array.isArray(command.data)) {
+            // Register multiple commands for the same handler (rpCommands)
+            command.data.forEach(cmd => client.commands.set(cmd.name, command));
+         } else {
+            client.commands.set(command.data.name, command);
+         }
+      }
     } catch (e) {
       console.warn('Failed loading command', file, e && e.message ? e.message : e);
     }

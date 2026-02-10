@@ -15,7 +15,14 @@ async function registerCommands() {
   for (const file of commandFiles) {
     try {
       const command = require(path.join(commandsPath, file));
-      if (command.data) commands.push(command.data.toJSON());
+      if (command.data) {
+        if (Array.isArray(command.data)) {
+           // Handle array of commands (like rpCommands)
+           command.data.forEach(cmd => commands.push(cmd.toJSON()));
+        } else {
+           commands.push(command.data.toJSON());
+        }
+      }
     } catch (e) {
       console.warn('Failed loading command for registration:', file, e && e.message ? e.message : e);
     }

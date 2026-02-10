@@ -1,8 +1,29 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const db = require('../libs/db');
+const config = require('../config');
 
 const SUBSCRIBER_ROLE_ID = process.env.SUBSCRIBER_ROLE_ID || '1441744621641400353';
 const ANNOUNCE_CHANNEL_ID = process.env.ANNOUNCE_CHANNEL_ID || '1436487981723680930';
+
+// List of random funny emojis for welcome message
+const FUNNY_EMOJIS = ['🎉', '👋', '🥳', '✨', '🚀', '🔥', '👀', '💃', '🕺', '🍕', '🐱', '🐲', '🎈', '🎊'];
+
+async function sendWelcomeLog(client, member) {
+  try {
+    const logChannelId = config.welcomeLogChannelId || '1470894200428957778';
+    const channel = await client.channels.fetch(logChannelId).catch(() => null);
+    
+    if (!channel) return console.warn('Welcome log channel not found:', logChannelId);
+
+    const randomEmoji = FUNNY_EMOJIS[Math.floor(Math.random() * FUNNY_EMOJIS.length)];
+    
+    // Send simple message as requested
+    await channel.send(`К нам присоединился <@${member.id}> ${randomEmoji}`);
+
+  } catch (err) {
+    console.error('Failed to send welcome log:', err);
+  }
+}
 
 async function sendWelcomeMessage(client, channelId) {
   const channel = await client.channels.fetch(channelId);
@@ -138,6 +159,10 @@ async function handleVerificationModal(interaction) {
     await member.roles.add(role);
     await interaction.reply({ content: '✅ Вы успешно прошли проверку! Роль выдана.', ephemeral: true });
     await sendAnnouncement(interaction.client, member, 'add');
+    
+    // Send public welcome log
+    await sendWelcomeLog(interaction.client, member);
+    
   } catch (err) {
     console.error('Failed to give role:', err);
     await interaction.reply({ content: '❌ Не удалось выдать роль. Проверьте права бота.', ephemeral: true });

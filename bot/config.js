@@ -18,6 +18,9 @@ const config = {
 
   // Rules
   rulesChannelId: '1436487842334507058',
+
+  // Welcome Log (New)
+  welcomeLogChannelId: '1470894200428957778',
 };
 
 module.exports = config;

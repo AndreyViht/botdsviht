@@ -10,6 +10,11 @@ const config = {
 
   // Role IDs
   subscriberRoleId: process.env.SUBSCRIBER_ROLE_ID || '1441744621641400353',
+
+  // Review System
+  reviewsChannelId: '1470879563981525052',
+  reviewsModerationChannelId: '1470881027739353279',
+  reviewsLogChannelId: '1470879879120683101',
 };
 
 module.exports = config;

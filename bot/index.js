@@ -124,11 +124,20 @@ client.once('ready', async () => {
     await ensureMenuPanel(client);
   } catch (e) { console.warn('Failed to ensure menu panel on ready:', e && e.message ? e.message : e); }
 
+  // Ensure reviews panel
+  try {
+    const { ensureReviewPanel } = require('./commands/reviewsHandler');
+    await ensureReviewPanel(client);
+  } catch (e) { console.warn('Failed to ensure review panel on ready:', e && e.message ? e.message : e); }
+
   // Central refresh interval
   setInterval(async () => {
     try {
       const { ensureMenuPanel } = require('./menus/menuHandler');
       await ensureMenuPanel(client).catch(e => console.warn('[PANEL] Menu error:', e.message));
+      
+      const { ensureReviewPanel } = require('./commands/reviewsHandler');
+      await ensureReviewPanel(client).catch(e => console.warn('[PANEL] Review error:', e.message));
     } catch (e) {
       console.error('[PANEL] Central refresh error:', e.message);
     }

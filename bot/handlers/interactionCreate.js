@@ -15,8 +15,17 @@ module.exports = {
       } catch (e) {}
 
       if (interaction.type === InteractionType.ApplicationCommand) {
-        // Commands are deleted, so this is unlikely to trigger unless old commands are cached.
-        await safeReply(interaction, { content: 'Команда больше не доступна.', ephemeral: true });
+        const command = interaction.client.commands.get(interaction.commandName);
+        if (!command) {
+            await safeReply(interaction, { content: 'Команда больше не доступна или не найдена.', ephemeral: true });
+            return;
+        }
+        try {
+            await command.execute(interaction);
+        } catch (error) {
+            console.error(error);
+            await safeReply(interaction, { content: 'Ошибка при выполнении команды.', ephemeral: true });
+        }
         return;
       }
 

@@ -39,9 +39,14 @@ async function ensureMenuPanel(client) {
     if (rec && rec.channelId === MENU_CHANNEL_ID && rec.messageId) {
       const existing = await ch.messages.fetch(rec.messageId).catch(() => null);
       if (existing) {
-        await existing.edit({ embeds: [embed], components: rows }).catch(() => null);
-        console.log('Updated existing menu panel');
-        return;
+        const lastMessages = await ch.messages.fetch({ limit: 1 });
+        const lastMsg = lastMessages.first();
+        if (lastMsg && lastMsg.id === existing.id) {
+           await existing.edit({ embeds: [embed], components: rows }).catch(() => null);
+           return;
+        } else {
+           await existing.delete().catch(() => {});
+        }
       }
     }
     const msg = await ch.send({ embeds: [embed], components: rows }).catch(() => null);

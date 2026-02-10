@@ -44,10 +44,14 @@ async function ensureRulesPanel(client) {
     if (rec && rec.channelId === config.rulesChannelId && rec.messageId) {
       const existing = await ch.messages.fetch(rec.messageId).catch(() => null);
       if (existing) {
-        // Optional: update rules in place if changed
-        // await existing.edit({ embeds: [embed] }).catch(() => null);
-        console.log('Rules panel exists');
-        return;
+        const lastMessages = await ch.messages.fetch({ limit: 1 });
+        const lastMsg = lastMessages.first();
+        if (lastMsg && lastMsg.id === existing.id) {
+           console.log('Rules panel is up to date');
+           return;
+        } else {
+           await existing.delete().catch(() => {});
+        }
       }
     }
 

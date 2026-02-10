@@ -43,10 +43,14 @@ async function ensureReviewPanel(client) {
     if (rec && rec.channelId === config.reviewsChannelId && rec.messageId) {
       const existing = await ch.messages.fetch(rec.messageId).catch(() => null);
       if (existing) {
-        // Optional: update existing message if needed
-        // await existing.edit({ embeds: [embed], components: [row] }).catch(() => null);
-        console.log('Review panel exists');
-        return;
+        const lastMessages = await ch.messages.fetch({ limit: 1 });
+        const lastMsg = lastMessages.first();
+        if (lastMsg && lastMsg.id === existing.id) {
+           console.log('Review panel is up to date');
+           return;
+        } else {
+           await existing.delete().catch(() => {});
+        }
       }
     }
 

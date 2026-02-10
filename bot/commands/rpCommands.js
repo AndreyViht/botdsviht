@@ -82,6 +82,13 @@ module.exports = {
 
     // Check channel restriction (only in 1470872434247733531)
     if (interaction.channelId !== '1470872434247733531') {
+      // Forbidden channel check
+      if (interaction.channelId === '1470872101580832982') {
+         return interaction.reply({ 
+           content: '🚫 В этом канале нельзя использовать РП команды!', 
+           ephemeral: true 
+         });
+      }
       return interaction.reply({ 
         content: '🎭 РП команды работают только в канале <#1470872434247733531>!', 
         ephemeral: true 

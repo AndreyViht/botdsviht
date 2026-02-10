@@ -1,5 +1,0 @@
-[
-  { "id": "1440000000000000001", "name": "Announcements" , "description_ru": "Новости и обновления", "description_en": "News and updates"},
-  { "id": "1440000000000000002", "name": "Music", "description_ru": "Уведомления о музыке", "description_en": "Music notifications"},
-  { "id": "1440000000000000003", "name": "Developers", "description_ru": "Обновления для разработчиков", "description_en": "Updates for devs"}
-]

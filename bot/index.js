@@ -130,6 +130,12 @@ client.once('ready', async () => {
     await ensureReviewPanel(client);
   } catch (e) { console.warn('Failed to ensure review panel on ready:', e && e.message ? e.message : e); }
 
+  // Ensure rules panel
+  try {
+    const { ensureRulesPanel } = require('./commands/rulesHandler');
+    await ensureRulesPanel(client);
+  } catch (e) { console.warn('Failed to ensure rules panel on ready:', e && e.message ? e.message : e); }
+
   // Central refresh interval
   setInterval(async () => {
     try {
@@ -138,6 +144,9 @@ client.once('ready', async () => {
       
       const { ensureReviewPanel } = require('./commands/reviewsHandler');
       await ensureReviewPanel(client).catch(e => console.warn('[PANEL] Review error:', e.message));
+
+      const { ensureRulesPanel } = require('./commands/rulesHandler');
+      await ensureRulesPanel(client).catch(e => console.warn('[PANEL] Rules error:', e.message));
     } catch (e) {
       console.error('[PANEL] Central refresh error:', e.message);
     }

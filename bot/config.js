@@ -15,6 +15,9 @@ const config = {
   reviewsChannelId: '1470879563981525052',
   reviewsModerationChannelId: '1470881027739353279',
   reviewsLogChannelId: '1470879879120683101',
+
+  // Rules
+  rulesChannelId: '1436487842334507058',
 };
 
 module.exports = config;

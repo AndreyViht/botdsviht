@@ -13,7 +13,10 @@ if (!token) {
 const intentsList = [
   GatewayIntentBits.Guilds,
   GatewayIntentBits.GuildMessages,
-  // GatewayIntentBits.GuildMessageReactions, // Not needed for buttons/modals
+  GatewayIntentBits.GuildVoiceStates, // Added for voice logging
+  GatewayIntentBits.GuildMembers,     // Added for member updates (nicknames/roles)
+  GatewayIntentBits.MessageContent,   // Added for message content (edit/delete logs)
+  // GatewayIntentBits.GuildMessageReactions, 
 ];
 
 const client = new Client({

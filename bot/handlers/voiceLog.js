@@ -6,9 +6,13 @@ async function logAction(client, text, color = 0x2B2D31) {
   try {
     const logChannelId = config.auditLogChannelId || '1470897162614214738';
     const channel = await client.channels.fetch(logChannelId).catch(() => null);
-    if (!channel) return;
+    if (!channel) {
+        console.warn(`[AUDIT] Channel not found: ${logChannelId}`);
+        return;
+    }
 
     // Use simple text or compact embed
+    const { EmbedBuilder } = require('discord.js');
     const embed = new EmbedBuilder()
       .setColor(color)
       .setDescription(text)

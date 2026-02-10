@@ -104,6 +104,7 @@ async function handleMusicButton(interaction) {
       return interaction.reply({ content: `🔒 Бота использует <@${session.ownerId}>. Вы не можете его остановить.`, ephemeral: true });
     }
 
+    session.player.stop(); // Stop the player first
     session.connection.destroy();
     activeSessions.delete(guildId);
     return interaction.reply({ content: '🛑 Музыка остановлена. До связи!', ephemeral: true });
@@ -136,7 +137,9 @@ async function handleMusicButton(interaction) {
     });
 
     const player = createAudioPlayer();
-    const resource = createAudioResource(streamUrl);
+    const resource = createAudioResource(streamUrl, {
+        inputType: 'arbitrary' // Try to help ffmpeg detect input
+    });
 
     player.play(resource);
     connection.subscribe(player);
@@ -147,6 +150,15 @@ async function handleMusicButton(interaction) {
       connection,
       ownerId: member.id,
       channelId: voiceChannel.id
+    });
+    
+    // Debug events
+    player.on('error', error => {
+        console.error('Audio Player Error:', error.message);
+    });
+    
+    connection.on(VoiceConnectionStatus.Ready, () => {
+        console.log('Voice Connection Ready!');
     });
 
     // Handle disconnect/idle

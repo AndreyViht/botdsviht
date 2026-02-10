@@ -103,25 +103,38 @@ client.once('ready', async () => {
     const welcomeChannel = await client.channels.fetch(WELCOME_CHANNEL_ID).catch(() => null);
 
     if (welcomeChannel) {
+      // Logic moved to reactionRole.js for consistency, calling ensures there.
+      // But here we had inline logic. Let's rely on reactionRole.js if possible, 
+      // or keep simple check. For now, let's just use the imported function if updated.
+      // Since we updated reactionRole.js logic via search/replace above, let's fix the call here.
+      
+      const { sendWelcomeMessage } = require('./roles/reactionRole');
+      // We need to implement the check logic inside sendWelcomeMessage or here.
+      // Let's implement a robust check here to match others.
+      
       const welcomeRec = db.get('welcome');
+      let exists = false;
+      
       if (welcomeRec && welcomeRec.messageId) {
-        try {
-          const oldMsg = await welcomeChannel.messages.fetch(welcomeRec.messageId).catch(() => null);
-          if (oldMsg) {
-             // Optional: update message if needed
-             // await sendWelcomeMessage(client, WELCOME_CHANNEL_ID); 
-             console.log('Welcome message exists:', welcomeRec.messageId);
-          } else {
-            await sendWelcomeMessage(client, WELCOME_CHANNEL_ID);
-            console.log('Posted new welcome message in', WELCOME_CHANNEL_ID);
-          }
-        } catch (e) {
-          await sendWelcomeMessage(client, WELCOME_CHANNEL_ID);
-          console.log('Refreshed welcome message in', WELCOME_CHANNEL_ID);
-        }
-      } else {
+         const oldMsg = await welcomeChannel.messages.fetch(welcomeRec.messageId).catch(() => null);
+         if (oldMsg) exists = true;
+      }
+      
+      if (!exists) {
+         // Check history
+         const messages = await welcomeChannel.messages.fetch({ limit: 5 }).catch(() => new Collection());
+         const botMsg = messages.find(m => m.author.id === client.user.id && m.embeds.length > 0 && m.embeds[0].data.image);
+         if (botMsg) {
+             exists = true;
+             await db.set('welcome', { channelId: WELCOME_CHANNEL_ID, messageId: botMsg.id });
+         }
+      }
+
+      if (!exists) {
         await sendWelcomeMessage(client, WELCOME_CHANNEL_ID);
-        console.log('Posted welcome message in', WELCOME_CHANNEL_ID);
+        console.log('Posted welcome message');
+      } else {
+        console.log('Welcome message exists');
       }
     }
   } catch (e) {

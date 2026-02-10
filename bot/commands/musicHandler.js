@@ -60,22 +60,24 @@ async function ensureMusicPanel(client) {
     const rows = makeMusicButtons();
 
     if (rec && rec.channelId === config.musicChannelId && rec.messageId) {
-    // If message exists in DB, fetch it
-    const existing = await ch.messages.fetch(rec.messageId).catch(() => null);
-    if (existing) {
-      // If message exists in Discord, check if it is the latest message in the channel
-      const lastMessages = await ch.messages.fetch({ limit: 1 });
-      const lastMsg = lastMessages.first();
-      
-      if (lastMsg && lastMsg.id === existing.id) {
-         console.log('Music panel is already the latest message');
-         return;
-      } else {
-         // If it's not the latest, delete it and repost
-         await existing.delete().catch(() => {});
+      // Fetch only the latest message to avoid fetching deleted ones if possible, 
+      // but fetch() with ID is direct.
+      const existing = await ch.messages.fetch(rec.messageId).catch(() => null);
+      if (existing) {
+        console.log('Music panel already exists, skipping post.');
+        return;
       }
     }
-  }
+
+    // Double check: Look for the last message in the channel sent by the bot
+    const messages = await ch.messages.fetch({ limit: 5 });
+    const botMsg = messages.find(m => m.author.id === client.user.id && m.embeds.length > 0 && m.embeds[0].title === '🎵 Музыкальный Пульт Viht');
+    
+    if (botMsg) {
+       console.log('Found existing music panel via search, updating DB.');
+       if (db && db.set) await db.set(MUSIC_PANEL_KEY, { channelId: config.musicChannelId, messageId: botMsg.id, postedAt: Date.now() });
+       return;
+    }
 
     const msg = await ch.send({ embeds: [embed], components: [rows] }).catch(() => null);
     if (msg && db && db.set) await db.set(MUSIC_PANEL_KEY, { channelId: config.musicChannelId, messageId: msg.id, postedAt: Date.now() });

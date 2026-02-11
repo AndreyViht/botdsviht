@@ -260,7 +260,15 @@ async function handleModerationAction(interaction) {
                     
                     // Update channel name counter
                     try {
-                        const approvedCount = reviews.filter(r => r.status === 'approved').length;
+                        let approvedCount = reviews.filter(r => r.status === 'approved').length;
+                        const currentName = logChannel.name;
+                        const match = currentName.match(/-(\d+)$/);
+                        let currentCount = match ? parseInt(match[1]) : 0;
+                        
+                        if (approvedCount < currentCount) {
+                           approvedCount = currentCount + 1;
+                        }
+
                         const newName = `├・📃・все-отзывы-${approvedCount}`;
                         if (logChannel.name !== newName) await logChannel.setName(newName);
                     } catch (e) {}
@@ -311,15 +319,25 @@ async function handleModerationAction(interaction) {
 
         // Update channel name counter
         try {
-          // Force fetch messages to get total approved count from channel history instead of just DB
-          // This is more accurate if DB was lost/reset
-          // However, fetching all messages is expensive.
-          // Let's stick to DB count for now but ensure we use the reviews array we have.
+          // If we lost DB, count might be wrong. Let's try to parse current channel name if DB count is 1 (fresh start)
+          let approvedCount = reviews.filter(r => r.status === 'approved').length;
           
-          const approvedCount = reviews.filter(r => r.status === 'approved').length;
-          // Format: "├・📃・все-отзывы-5"
-          // Ensure we don't spam API
-          const currentName = logChannel.name;
+          // Heuristic: If we only have 1 approved review in DB (the one we just added),
+          // but the channel name says "105", we should probably increment 105 instead of setting it to 1.
+          // BUT: we want to sync DB with reality eventually.
+          // Better approach: trust DB. If DB is wiped, user has to accept reset or we need to fetch all messages (slow).
+          // Compromise: Read current channel name number.
+          
+          const currentName = logChannel.name; // e.g. "├・📃・все-отзывы-5"
+          const match = currentName.match(/-(\d+)$/);
+          let currentCount = match ? parseInt(match[1]) : 0;
+          
+          // If DB count is suspiciously low (e.g. 1) compared to channel name (e.g. 100), assume DB was reset
+          // and just increment the channel name counter.
+          if (approvedCount < currentCount) {
+             approvedCount = currentCount + 1;
+          }
+
           const newName = `├・📃・все-отзывы-${approvedCount}`;
           
           if (currentName !== newName) {

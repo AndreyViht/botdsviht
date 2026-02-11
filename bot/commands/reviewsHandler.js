@@ -269,7 +269,7 @@ async function handleModerationAction(interaction) {
                            approvedCount = currentCount + 1;
                         }
 
-                        const newName = `├・📃・все-отзывы-${approvedCount}`;
+                        const newName = `├・${approvedCount}・все-отзывы`;
                         if (logChannel.name !== newName) await logChannel.setName(newName);
                     } catch (e) {}
                 }
@@ -328,8 +328,8 @@ async function handleModerationAction(interaction) {
           // Better approach: trust DB. If DB is wiped, user has to accept reset or we need to fetch all messages (slow).
           // Compromise: Read current channel name number.
           
-          const currentName = logChannel.name; // e.g. "├・📃・все-отзывы-5"
-          const match = currentName.match(/-(\d+)$/);
+          const currentName = logChannel.name; // e.g. "├・5・все-отзывы"
+          const match = currentName.match(/・(\d+)・/);
           let currentCount = match ? parseInt(match[1]) : 0;
           
           // If DB count is suspiciously low (e.g. 1) compared to channel name (e.g. 100), assume DB was reset
@@ -338,7 +338,7 @@ async function handleModerationAction(interaction) {
              approvedCount = currentCount + 1;
           }
 
-          const newName = `├・📃・все-отзывы-${approvedCount}`;
+          const newName = `├・${approvedCount}・все-отзывы`;
           
           if (currentName !== newName) {
              await logChannel.setName(newName);

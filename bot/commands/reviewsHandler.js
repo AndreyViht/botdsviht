@@ -278,7 +278,11 @@ async function handleModerationAction(interaction) {
                         }
 
                         const newName = `├・${approvedCount}・все-отзывы`;
-                        if (logChannel.name !== newName) await logChannel.setName(newName);
+                        if (logChannel.name !== newName) {
+                             await logChannel.setName(newName);
+                        } else if (logChannel.name.includes('📃')) {
+                             await logChannel.setName(newName);
+                        }
                     } catch (e) {}
                 }
                 
@@ -359,7 +363,11 @@ async function handleModerationAction(interaction) {
 
           const newName = `├・${approvedCount}・все-отзывы`;
           
+          // Force update to ensure format is correct even if count is same
           if (currentName !== newName) {
+             await logChannel.setName(newName);
+          } else if (currentName.includes('📃')) {
+             // If old format "├・📃・все-отзывы-5", force update to "├・5・все-отзывы"
              await logChannel.setName(newName);
           }
         } catch (e) {

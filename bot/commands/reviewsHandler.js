@@ -261,9 +261,17 @@ async function handleModerationAction(interaction) {
                     // Update channel name counter
                     try {
                         let approvedCount = reviews.filter(r => r.status === 'approved').length;
+                        // Try to parse current count from channel name (support old and new format)
                         const currentName = logChannel.name;
-                        const match = currentName.match(/-(\d+)$/);
-                        let currentCount = match ? parseInt(match[1]) : 0;
+                        let currentCount = 0;
+                        
+                        const matchNew = currentName.match(/・(\d+)・/);
+                        if (matchNew) {
+                           currentCount = parseInt(matchNew[1]);
+                        } else {
+                           const matchOld = currentName.match(/-(\d+)$/);
+                           if (matchOld) currentCount = parseInt(matchOld[1]);
+                        }
                         
                         if (approvedCount < currentCount) {
                            approvedCount = currentCount + 1;
@@ -328,9 +336,20 @@ async function handleModerationAction(interaction) {
           // Better approach: trust DB. If DB is wiped, user has to accept reset or we need to fetch all messages (slow).
           // Compromise: Read current channel name number.
           
-          const currentName = logChannel.name; // e.g. "├・5・все-отзывы"
-          const match = currentName.match(/・(\d+)・/);
-          let currentCount = match ? parseInt(match[1]) : 0;
+          // If currentName doesn't match new format yet (e.g. "├・📃・все-отзывы-1"), 
+          // we might fail to parse currentCount correctly with new regex.
+          // Let's try both old and new regex.
+          const currentName = logChannel.name; 
+          let currentCount = 0;
+          
+          const matchNew = currentName.match(/・(\d+)・/);
+          if (matchNew) {
+             currentCount = parseInt(matchNew[1]);
+          } else {
+             // Try old format
+             const matchOld = currentName.match(/-(\d+)$/);
+             if (matchOld) currentCount = parseInt(matchOld[1]);
+          }
           
           // If DB count is suspiciously low (e.g. 1) compared to channel name (e.g. 100), assume DB was reset
           // and just increment the channel name counter.

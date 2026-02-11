@@ -10,7 +10,6 @@ const {
   createAudioResource, 
   AudioPlayerStatus, 
   VoiceConnectionStatus 
-  StreamType
 } = require('@discordjs/voice');
 const db = require('../libs/db');
 const config = require('../config');
@@ -156,9 +155,8 @@ async function handleMusicButton(interaction) {
     
     // Use StreamType.Arbitrary explicitly and inlineVolume for future volume control
     const resource = createAudioResource(streamUrl, {
-        inputType: StreamType.Arbitrary,
-        inlineVolume: true
-    });
+      inlineVolume: true
+  });
 
     player.play(resource);
     connection.subscribe(player);

@@ -113,8 +113,9 @@ client.once('ready', async () => {
 
   // Ensure reviews panel
   try {
-    const { ensureReviewPanel } = require('./commands/reviewsHandler');
+    const { ensureReviewPanel, syncReviewChannelCount } = require('./commands/reviewsHandler');
     await ensureReviewPanel(client);
+    await syncReviewChannelCount(client); // Sync count on startup
   } catch (e) { console.warn('Failed to ensure review panel on ready:', e && e.message ? e.message : e); }
 
   // Ensure rules panel

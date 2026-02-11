@@ -389,4 +389,27 @@ async function handleModerationAction(interaction) {
   }
 }
 
-module.exports = { ensureReviewPanel, handleReviewButton, handleReviewModal };
+async function syncReviewChannelCount(client) {
+  try {
+    const logChannel = await client.channels.fetch(config.reviewsLogChannelId).catch(() => null);
+    if (!logChannel) return;
+
+    // Fetch last 100 messages to count actual reviews (heuristic)
+    // We assume reviews are messages from bot with embeds
+    const messages = await logChannel.messages.fetch({ limit: 100 });
+    const count = messages.filter(m => m.author.id === client.user.id && m.embeds.length > 0).size;
+    
+    // Only update if it's different or old format
+    const currentName = logChannel.name;
+    const newName = `├・${count}・все-отзывы`;
+    
+    if (currentName !== newName || currentName.includes('📃')) {
+       await logChannel.setName(newName);
+       console.log(`[REVIEWS] Synced channel count to ${count}`);
+    }
+  } catch (e) {
+    console.warn('[REVIEWS] Failed to sync channel count:', e.message);
+  }
+}
+
+module.exports = { ensureReviewPanel, handleReviewButton, handleReviewModal, syncReviewChannelCount };

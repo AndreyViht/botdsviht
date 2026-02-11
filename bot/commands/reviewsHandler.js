@@ -184,10 +184,96 @@ async function handleModerationAction(interaction) {
     const reviewIndex = reviews.findIndex(r => r.id === reviewId);
 
     if (reviewIndex === -1) {
-      // If review not found in memory/file db, it might be lost due to restart
-      // But we can try to reconstruct it from the embed if possible, or just fail gracefully.
-      // For now, let's just fail but cleaner.
-      return interaction.update({ content: '❌ Отзыв не найден в базе данных (возможно, бот был перезагружен).', components: [], embeds: [] });
+      // Try to reconstruct from embed
+      if (interaction.message && interaction.message.embeds.length > 0) {
+          const embed = interaction.message.embeds[0];
+          // Try to extract data from embed fields
+          // Format:
+          // User: Tag (<@ID>)
+          // Text: ...
+          
+          let userId = null;
+          let userTag = 'Unknown';
+          let text = '';
+
+          try {
+              const userField = embed.fields.find(f => f.name === 'Пользователь');
+              const textField = embed.fields.find(f => f.name === 'Текст отзыва');
+              
+              if (userField && textField) {
+                  const match = userField.value.match(/<@(\d+)>/);
+                  if (match) userId = match[1];
+                  userTag = userField.value.split(' (')[0];
+                  text = textField.value;
+              }
+          } catch (e) {}
+
+          if (userId && text) {
+              // Reconstruct review object
+              const restoredReview = {
+                  id: reviewId,
+                  userId: userId,
+                  userTag: userTag,
+                  text: text,
+                  status: 'pending',
+                  createdAt: Date.now()
+              };
+              
+              // Add back to reviews list
+              reviews.push(restoredReview);
+              
+              // Continue processing with the restored review
+              // We need to find index again
+              // (Fall through to processing logic)
+              const newIndex = reviews.length - 1;
+              
+              // Proceed with action
+              if (action === 'reject') {
+                reviews[newIndex].status = 'rejected';
+                await db.set('reviews', reviews);
+                await interaction.update({ content: `❌ Отзыв от **${restoredReview.userTag}** отклонен модератором (восстановлен из сообщения).`, components: [], embeds: [] });
+                return;
+              } else {
+                reviews[newIndex].status = 'approved';
+                await db.set('reviews', reviews);
+                
+                // ... (Publish logic copied from below) ...
+                // Publish to public channel
+                const logChannel = await interaction.client.channels.fetch(config.reviewsLogChannelId).catch(() => null);
+                if (logChannel) {
+                    const publicEmbed = new EmbedBuilder()
+                    .setTitle('🌟 Новый отзыв!')
+                    .setColor(0x00BFFF)
+                    .setDescription(restoredReview.text)
+                    .setFooter({ text: 'Спасибо за ваш отзыв!' })
+                    .setTimestamp();
+
+                    try {
+                        const author = await interaction.client.users.fetch(restoredReview.userId);
+                        publicEmbed.setAuthor({ name: author.tag, iconURL: author.displayAvatarURL() });
+                        publicEmbed.addFields({ name: 'Автор', value: `<@${restoredReview.userId}>`, inline: true });
+                    } catch (e) {
+                        publicEmbed.setAuthor({ name: restoredReview.userTag });
+                    }
+
+                    await logChannel.send({ embeds: [publicEmbed] });
+                    
+                    // Update channel name counter
+                    try {
+                        const approvedCount = reviews.filter(r => r.status === 'approved').length;
+                        const newName = `├・📃・все-отзывы-${approvedCount}`;
+                        if (logChannel.name !== newName) await logChannel.setName(newName);
+                    } catch (e) {}
+                }
+                
+                await interaction.update({ content: `✅ Отзыв от **${restoredReview.userTag}** успешно опубликован (восстановлен из сообщения)!`, components: [], embeds: [] });
+                return;
+              }
+          }
+      }
+
+      // If reconstruction failed
+      return interaction.update({ content: '❌ Отзыв не найден в базе данных и не удалось восстановить.', components: [], embeds: [] });
     }
 
     const review = reviews[reviewIndex];

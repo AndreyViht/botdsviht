@@ -103,7 +103,13 @@ async function handleMusicButton(interaction) {
 
   // Stop Logic
   if (customId === 'music_stop') {
+    // If no session found in memory, try to find a connection anyway and destroy it
     if (!session) {
+      const connection = require('@discordjs/voice').getVoiceConnection(guildId);
+      if (connection) {
+          connection.destroy();
+          return interaction.reply({ content: '🛑 Принудительная остановка (сессия была потеряна).', ephemeral: true });
+      }
       return interaction.reply({ content: '💤 Я и так не играю.', ephemeral: true });
     }
     // Access Control: Only owner or admin can stop

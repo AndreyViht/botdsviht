@@ -10,6 +10,7 @@ const {
   createAudioResource, 
   AudioPlayerStatus, 
   VoiceConnectionStatus 
+  StreamType
 } = require('@discordjs/voice');
 const db = require('../libs/db');
 const config = require('../config');
@@ -146,29 +147,34 @@ async function handleMusicButton(interaction) {
       adapterCreator: interaction.guild.voiceAdapterCreator,
     });
 
+    // Extensive Logging
+    connection.on('stateChange', (oldState, newState) => {
+        console.log(`[Connection] State changed from ${oldState.status} to ${newState.status}`);
+    });
+
     const player = createAudioPlayer();
+    
+    // Use StreamType.Arbitrary explicitly and inlineVolume for future volume control
     const resource = createAudioResource(streamUrl, {
-        inputType: 'arbitrary' // Try to help ffmpeg detect input
+        inputType: StreamType.Arbitrary,
+        inlineVolume: true
     });
 
     player.play(resource);
     connection.subscribe(player);
 
-    // Save session
-    activeSessions.set(guildId, {
-      player,
-      connection,
-      ownerId: member.id,
-      channelId: voiceChannel.id
+    // Player Logging
+    player.on(AudioPlayerStatus.Playing, () => {
+        console.log('[Player] Started playing!');
     });
-    
-    // Debug events
+    player.on(AudioPlayerStatus.Buffering, () => {
+        console.log('[Player] Buffering...');
+    });
+    player.on(AudioPlayerStatus.Idle, () => {
+        console.log('[Player] Became Idle (Stream ended or failed to start).');
+    });
     player.on('error', error => {
-        console.error('Audio Player Error:', error.message);
-    });
-    
-    connection.on(VoiceConnectionStatus.Ready, () => {
-        console.log('Voice Connection Ready!');
+        console.error('[Player] Error:', error.message);
     });
 
     // Handle disconnect/idle

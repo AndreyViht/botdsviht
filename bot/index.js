@@ -124,6 +124,17 @@ client.once('ready', async () => {
     await ensureRulesPanel(client);
   } catch (e) { console.warn('Failed to ensure rules panel on ready:', e && e.message ? e.message : e); }
 
+  // Ensure cleanup of old music channel
+  try {
+    const oldMusicChannel = await client.channels.fetch('1470911152145043466').catch(() => null);
+    if (oldMusicChannel) {
+        // Just ensure we don't post there. We could delete it if we wanted, but let's just ignore it.
+        // Or if you want to be sure no messages are posted:
+        // await oldMusicChannel.send('⚠️ Музыкальный модуль отключен.');
+        console.log('[CLEANUP] Music channel exists but module is disabled.');
+    }
+  } catch (e) {}
+
 
 
   // Central refresh interval

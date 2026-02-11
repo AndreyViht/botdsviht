@@ -311,10 +311,19 @@ async function handleModerationAction(interaction) {
 
         // Update channel name counter
         try {
+          // Force fetch messages to get total approved count from channel history instead of just DB
+          // This is more accurate if DB was lost/reset
+          // However, fetching all messages is expensive.
+          // Let's stick to DB count for now but ensure we use the reviews array we have.
+          
           const approvedCount = reviews.filter(r => r.status === 'approved').length;
+          // Format: "├・📃・все-отзывы-5"
+          // Ensure we don't spam API
+          const currentName = logChannel.name;
           const newName = `├・📃・все-отзывы-${approvedCount}`;
-          if (logChannel.name !== newName) {
-            await logChannel.setName(newName);
+          
+          if (currentName !== newName) {
+             await logChannel.setName(newName);
           }
         } catch (e) {
           console.warn('[REVIEWS] Failed to update channel name (rate limit?):', e.message);

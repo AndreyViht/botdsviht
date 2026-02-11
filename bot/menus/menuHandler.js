@@ -80,13 +80,37 @@ async function handleMenuButton(interaction) {
     }
 
     if (id === 'menu_vpn') {
-      const e = new EmbedBuilder().setTitle('🌐 Viht VPN').setColor(0x00AE86).setDescription('Безопасный и быстрый VPN. Выберите действие:');
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setURL('https://t.me/VihtVPNbot').setLabel('🤖 Бот для VPN').setStyle(ButtonStyle.Link),
-        new ButtonBuilder().setURL('https://vihtai.pro/').setLabel('🌍 Сайт').setStyle(ButtonStyle.Link),
-        new ButtonBuilder().setURL('https://vihtai.pro/instructions').setLabel('📄 Инструкции').setStyle(ButtonStyle.Link)
+      const e = new EmbedBuilder()
+        .setTitle('🔐 VihtAI VPN — твой интернет без границ 🌍')
+        .setColor(0x00AE86)
+        .setDescription(
+          'Устал от блокировок, ограничений и медленного соединения?\n' +
+          '**Viht VPN** открывает интернет таким, каким он должен быть — **быстрым, свободным и безопасным** ⚡️\n\n' +
+          '✨ **Что ты получаешь с Viht VPN:**\n' +
+          '🚀 Высокую скорость без лагов\n' +
+          '🛡 Надёжную защиту данных и приватности\n' +
+          '🌐 Доступ к сайтам и сервисам из любой точки мира\n' +
+          '📱 Поддержку ПК, ноутбуков и мобильных устройств\n' +
+          '🧠 Простую настройку — справится даже новичок\n\n' +
+          '🔓 **Никаких сложных схем**\n' +
+          '⏱️ **Минимум кликов**\n' +
+          '😌 **Максимум комфорта**\n\n' +
+          '👉 **Начни прямо сейчас:**'
+        )
+        .setFooter({ text: 'Viht VPN — контроль над интернетом в твоих руках. Подключайся сегодня!' });
+
+      const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setURL('https://vihtai.pro/').setLabel('🌐 Главная страница').setStyle(ButtonStyle.Link),
+        new ButtonBuilder().setURL('https://vihtai.pro/downloads').setLabel('⬇️ Скачать VPN').setStyle(ButtonStyle.Link)
       );
-      await safeUpdate(interaction, { embeds: [e], components: [row, ...makeBackRow()] });
+
+      const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setURL('https://vihtai.pro/instructions').setLabel('📖 Инструкции').setStyle(ButtonStyle.Link),
+        new ButtonBuilder().setURL('https://t.me/VihtVPNbot').setLabel('🫧 Бот управления').setStyle(ButtonStyle.Link),
+        new ButtonBuilder().setURL('https://t.me/vihtikai').setLabel('❤️ Новости (TG)').setStyle(ButtonStyle.Link)
+      );
+
+      await safeUpdate(interaction, { embeds: [e], components: [row1, row2, ...makeBackRow()] });
       return;
     }
 

@@ -110,12 +110,16 @@ async function handleMusicButton(interaction) {
     const isOwner = session.ownerId === member.id;
     const isAdmin = member.permissions.has('Administrator');
 
+    // Force stop if session exists, even if permissions are tricky (simplify for now to fix 'stuck' state)
     if (!isOwner && !isAdmin) {
       return interaction.reply({ content: `🔒 Бота использует <@${session.ownerId}>. Вы не можете его остановить.`, ephemeral: true });
     }
 
-    session.player.stop(); // Stop the player first
-    session.connection.destroy();
+    try {
+        if (session.player) session.player.stop();
+        if (session.connection) session.connection.destroy();
+    } catch (e) {}
+    
     activeSessions.delete(guildId);
     return interaction.reply({ content: '🛑 Музыка остановлена. До связи!', ephemeral: true });
   }

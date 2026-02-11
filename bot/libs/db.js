@@ -4,15 +4,25 @@ let dbInitialized = false;
 let writeInProgress = false; // Защита от race condition
 const writeQueue = []; // Очередь операций записи
 
-// Initialize lowdb async
+// Initialize lowdb async (compatible with lowdb v7+ ESM/CommonJS)
 async function initDb() {
   if (db) return db;
-  const { Low, JSONFile } = await import('lowdb');
+  // Use dynamic import for ESM module support
+  const { Low } = await import('lowdb');
+  const { JSONFile } = await import('lowdb/node');
+  
   const dbFile = path.join(__dirname, '..', '..', 'db.json');
   const adapter = new JSONFile(dbFile);
-  db = new Low(adapter);
+  
+  // v7 Low constructor takes adapter and default data
+  const defaultData = { welcome: null, stats: { aiRequests: 0 }, rulesPosted: null, supportPanelPosted: null };
+  db = new Low(adapter, defaultData);
+  
   await db.read();
-  db.data = db.data || { welcome: null, stats: { aiRequests: 0 }, rulesPosted: null, supportPanelPosted: null };
+  
+  // Ensure default data if file was empty or missing
+  db.data = db.data || defaultData;
+  
   await db.write();
   dbInitialized = true;
   return db;

@@ -9,7 +9,9 @@ const {
   createAudioPlayer, 
   createAudioResource, 
   AudioPlayerStatus, 
-  VoiceConnectionStatus 
+  VoiceConnectionStatus,
+  StreamType,
+  entersState
 } = require('@discordjs/voice');
 const db = require('../libs/db');
 const config = require('../config');

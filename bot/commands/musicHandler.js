@@ -142,7 +142,7 @@ async function handleMusicButton(interaction) {
   }
 
   const genre = customId.split('_')[1]; // lofi, phonk, pop
-  const streamUrl = STREAMS[genre];
+  const streamUrl = 'http://ep128.hostingradio.ru:8030/ep128'; // Europa Plus (MP3 Stream)
 
   if (!streamUrl) return interaction.reply({ content: '❌ Ошибка ссылки потока.', ephemeral: true });
 

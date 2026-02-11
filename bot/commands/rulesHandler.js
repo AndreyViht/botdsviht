@@ -44,15 +44,19 @@ async function ensureRulesPanel(client) {
     if (rec && rec.channelId === config.rulesChannelId && rec.messageId) {
       const existing = await ch.messages.fetch(rec.messageId).catch(() => null);
       if (existing) {
-        const lastMessages = await ch.messages.fetch({ limit: 1 });
-        const lastMsg = lastMessages.first();
-        if (lastMsg && lastMsg.id === existing.id) {
-           console.log('Rules panel is up to date');
-           return;
-        } else {
-           await existing.delete().catch(() => {});
-        }
+        console.log('Rules panel exists');
+        return;
       }
+    }
+
+    // Double check history
+    const messages = await ch.messages.fetch({ limit: 5 });
+    const botMsg = messages.find(m => m.author.id === client.user.id && m.embeds.length > 0 && m.embeds[0].title === '📜 Устав Сообщества Viht');
+    
+    if (botMsg) {
+        console.log('Found existing rules panel via search.');
+        if (db && db.set) await db.set(RULES_PANEL_KEY, { channelId: config.rulesChannelId, messageId: botMsg.id, postedAt: Date.now() });
+        return;
     }
 
     const msg = await ch.send({ embeds: [embed] }).catch(() => null);

@@ -173,8 +173,39 @@ async function handleVerificationModal(interaction) {
 async function handleReactionAdd(reaction, user) { return; }
 async function handleReactionRemove(reaction, user) { return; }
 
+async function initWelcomeMessage(client, channelId) {
+  const welcomeChannel = await client.channels.fetch(channelId).catch(() => null);
+  if (welcomeChannel) {
+      const welcomeRec = db.get('welcome');
+      
+      // Check via DB
+      if (welcomeRec && welcomeRec.messageId) {
+          const oldMsg = await welcomeChannel.messages.fetch(welcomeRec.messageId).catch(() => null);
+          if (oldMsg) {
+             console.log('Welcome message exists (DB verified).');
+             return; 
+          }
+      }
+
+      // Check via History (Double protection)
+      const messages = await welcomeChannel.messages.fetch({ limit: 5 });
+      const botMsg = messages.find(m => m.author.id === client.user.id && m.embeds.length > 0 && m.embeds[0].data.image);
+
+      if (botMsg) {
+         console.log('Welcome message found in history, updating DB.');
+         if (db && db.set) await db.set('welcome', { channelId, messageId: botMsg.id });
+         return;
+      }
+
+      // Post new
+      await sendWelcomeMessage(client, channelId);
+      console.log('Posted new welcome message in', channelId);
+  }
+}
+
 module.exports = { 
   sendWelcomeMessage, 
+  initWelcomeMessage,
   handleReactionAdd, 
   handleReactionRemove,
   handleVerificationButton,

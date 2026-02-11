@@ -43,15 +43,19 @@ async function ensureReviewPanel(client) {
     if (rec && rec.channelId === config.reviewsChannelId && rec.messageId) {
       const existing = await ch.messages.fetch(rec.messageId).catch(() => null);
       if (existing) {
-        const lastMessages = await ch.messages.fetch({ limit: 1 });
-        const lastMsg = lastMessages.first();
-        if (lastMsg && lastMsg.id === existing.id) {
-           console.log('Review panel is up to date');
-           return;
-        } else {
-           await existing.delete().catch(() => {});
-        }
+        console.log('Review panel exists');
+        return;
       }
+    }
+
+    // Double check history
+    const messages = await ch.messages.fetch({ limit: 5 });
+    const botMsg = messages.find(m => m.author.id === client.user.id && m.embeds.length > 0 && m.embeds[0].title === '📝 Отзывы о Viht Community');
+
+    if (botMsg) {
+        console.log('Found existing review panel via search.');
+        if (db && db.set) await db.set(REVIEW_PANEL_KEY, { channelId: config.reviewsChannelId, messageId: botMsg.id, postedAt: Date.now() });
+        return;
     }
 
     const msg = await ch.send({ embeds: [embed], components: [row] }).catch(() => null);

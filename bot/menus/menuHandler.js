@@ -39,16 +39,27 @@ async function ensureMenuPanel(client) {
     if (rec && rec.channelId === MENU_CHANNEL_ID && rec.messageId) {
       const existing = await ch.messages.fetch(rec.messageId).catch(() => null);
       if (existing) {
-        const lastMessages = await ch.messages.fetch({ limit: 1 });
-        const lastMsg = lastMessages.first();
-        if (lastMsg && lastMsg.id === existing.id) {
-           await existing.edit({ embeds: [embed], components: rows }).catch(() => null);
-           return;
-        } else {
-           await existing.delete().catch(() => {});
-        }
+        // Try to update it to ensure buttons are latest
+        try {
+           await existing.edit({ embeds: [embed], components: rows });
+           console.log('Updated existing menu panel');
+        } catch (e) {}
+        return;
       }
     }
+
+    // Double check history
+    const messages = await ch.messages.fetch({ limit: 5 });
+    const botMsg = messages.find(m => m.author.id === client.user.id && m.embeds.length > 0 && m.embeds[0].title === '🧭 Навигация по Discord серверу Viht');
+    
+    if (botMsg) {
+        console.log('Found existing menu panel via search.');
+        // Update it
+        try { await botMsg.edit({ embeds: [embed], components: rows }); } catch (e) {}
+        if (db && db.set) await db.set(MENU_KEY, { channelId: MENU_CHANNEL_ID, messageId: botMsg.id, postedAt: Date.now() });
+        return;
+    }
+
     const msg = await ch.send({ embeds: [embed], components: rows }).catch(() => null);
     if (msg && db && db.set) await db.set(MENU_KEY, { channelId: MENU_CHANNEL_ID, messageId: msg.id, postedAt: Date.now() });
     console.log('Posted new menu panel to', MENU_CHANNEL_ID);

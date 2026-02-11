@@ -184,7 +184,10 @@ async function handleModerationAction(interaction) {
     const reviewIndex = reviews.findIndex(r => r.id === reviewId);
 
     if (reviewIndex === -1) {
-      return interaction.reply({ content: '❌ Отзыв не найден в базе данных.', ephemeral: true });
+      // If review not found in memory/file db, it might be lost due to restart
+      // But we can try to reconstruct it from the embed if possible, or just fail gracefully.
+      // For now, let's just fail but cleaner.
+      return interaction.update({ content: '❌ Отзыв не найден в базе данных (возможно, бот был перезагружен).', components: [], embeds: [] });
     }
 
     const review = reviews[reviewIndex];

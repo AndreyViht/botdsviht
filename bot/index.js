@@ -124,11 +124,7 @@ client.once('ready', async () => {
     await ensureRulesPanel(client);
   } catch (e) { console.warn('Failed to ensure rules panel on ready:', e && e.message ? e.message : e); }
 
-  // Ensure music panel
-  try {
-    const { ensureMusicPanel } = require('./commands/musicHandler');
-    await ensureMusicPanel(client);
-  } catch (e) { console.warn('Failed to ensure music panel on ready:', e && e.message ? e.message : e); }
+
 
   // Central refresh interval
   setInterval(async () => {

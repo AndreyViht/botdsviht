@@ -25,8 +25,7 @@ const config = {
   // Audit Log
   auditLogChannelId: '1470897162614214738',
 
-  // Music System
-  musicChannelId: '1470911152145043466',
+
 };
 
 module.exports = config;

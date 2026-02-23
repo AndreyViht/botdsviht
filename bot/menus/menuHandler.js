@@ -5,6 +5,10 @@ const { safeUpdate } = require('../libs/interactionUtils');
 const MENU_KEY = 'menuPanelPosted';
 const MENU_CHANNEL_ID = '1445738068337496074';
 
+// Хранилище таймеров для восстановления сообщений
+const messageRestoreTimers = new Map();
+const RESTORE_DELAY = 20000; // 20 секунд
+
 function makeMainEmbed() {
   return new EmbedBuilder()
     .setTitle('🧭 Навигация по Discord серверу Viht')
@@ -70,12 +74,46 @@ function makeBackRow() {
   return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('menu_main').setLabel('◀️ Назад').setStyle(ButtonStyle.Secondary))];
 }
 
+async function scheduleMessageRestore(messageId, restoreData) {
+  // Отменяем предыдущий таймер если существует
+  if (messageRestoreTimers.has(messageId)) {
+    clearTimeout(messageRestoreTimers.get(messageId));
+  }
+
+  // Устанавливаем новый таймер на восстановление через 20 секунд
+  const timerId = setTimeout(() => {
+    messageRestoreTimers.delete(messageId);
+  }, RESTORE_DELAY);
+
+  messageRestoreTimers.set(messageId, timerId);
+}
+
+async function shouldRestoreMessage(messageId) {
+  return messageRestoreTimers.has(messageId);
+}
+
 async function handleMenuButton(interaction) {
   try {
     const id = interaction.customId;
+    const messageId = interaction.message.id;
+    
     // Build views
     if (id === 'menu_main') {
       await safeUpdate(interaction, { embeds: [makeMainEmbed()], components: mainRow() });
+      scheduleMessageRestore(messageId, { embeds: [makeMainEmbed()], components: mainRow() });
+      
+      // Восстанавливаем исходное состояние через 20 секунд
+      setTimeout(async () => {
+        try {
+          const msg = await interaction.message.channel.messages.fetch(messageId);
+          if (msg && shouldRestoreMessage(messageId)) {
+            await msg.edit({ embeds: [makeMainEmbed()], components: mainRow() });
+            messageRestoreTimers.delete(messageId);
+          }
+        } catch (e) {
+          console.error('Error restoring main menu:', e && e.message ? e.message : e);
+        }
+      }, RESTORE_DELAY);
       return;
     }
 
@@ -111,6 +149,20 @@ async function handleMenuButton(interaction) {
       );
 
       await safeUpdate(interaction, { embeds: [e], components: [row1, row2, ...makeBackRow()] });
+      scheduleMessageRestore(messageId, { embeds: [makeMainEmbed()], components: mainRow() });
+      
+      // Восстанавливаем исходное состояние через 20 секунд
+      setTimeout(async () => {
+        try {
+          const msg = await interaction.message.channel.messages.fetch(messageId);
+          if (msg && shouldRestoreMessage(messageId)) {
+            await msg.edit({ embeds: [makeMainEmbed()], components: mainRow() });
+            messageRestoreTimers.delete(messageId);
+          }
+        } catch (e) {
+          console.error('Error restoring main menu after VPN:', e && e.message ? e.message : e);
+        }
+      }, RESTORE_DELAY);
       return;
     }
 
@@ -120,12 +172,40 @@ async function handleMenuButton(interaction) {
         new ButtonBuilder().setURL('https://discord.com/channels/1428051812103094282/1470872101580832982').setLabel('🗣️ Флудилка').setStyle(ButtonStyle.Link)
       );
       await safeUpdate(interaction, { embeds: [e], components: [row, ...makeBackRow()] });
+      scheduleMessageRestore(messageId, { embeds: [makeMainEmbed()], components: mainRow() });
+      
+      // Восстанавливаем исходное состояние через 20 секунд
+      setTimeout(async () => {
+        try {
+          const msg = await interaction.message.channel.messages.fetch(messageId);
+          if (msg && shouldRestoreMessage(messageId)) {
+            await msg.edit({ embeds: [makeMainEmbed()], components: mainRow() });
+            messageRestoreTimers.delete(messageId);
+          }
+        } catch (e) {
+          console.error('Error restoring main menu after DS:', e && e.message ? e.message : e);
+        }
+      }, RESTORE_DELAY);
       return;
     }
 
     if (id === 'menu_goods') {
       const e = new EmbedBuilder().setTitle('🛍️ Товары').setColor(0xFFA500).setDescription('Этот раздел скоро появится! Следите за новостями.');
       await safeUpdate(interaction, { embeds: [e], components: makeBackRow() });
+      scheduleMessageRestore(messageId, { embeds: [makeMainEmbed()], components: mainRow() });
+      
+      // Восстанавливаем исходное состояние через 20 секунд
+      setTimeout(async () => {
+        try {
+          const msg = await interaction.message.channel.messages.fetch(messageId);
+          if (msg && shouldRestoreMessage(messageId)) {
+            await msg.edit({ embeds: [makeMainEmbed()], components: mainRow() });
+            messageRestoreTimers.delete(messageId);
+          }
+        } catch (e) {
+          console.error('Error restoring main menu after goods:', e && e.message ? e.message : e);
+        }
+      }, RESTORE_DELAY);
       return;
     }
 

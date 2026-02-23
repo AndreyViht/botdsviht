@@ -147,8 +147,8 @@ async function handlePetSpeciesButton(interaction) {
     }
 
     console.log('[handlePetSpeciesButton] Showing breed selection');
-    // Используем safeUpdate который делает дефер внутри
-    await safeUpdate(interaction, {
+    // Используем обычный update который безопасен для кнопок
+    await interaction.update({
       embeds: [
         new EmbedBuilder()
           .setTitle(`${SPECIES[species].label} — Выбор породы`)
@@ -160,11 +160,7 @@ async function handlePetSpeciesButton(interaction) {
     
   } catch (e) {
     console.error('[handlePetSpeciesButton] ERROR:', e.message);
-    try {
-      await safeUpdate(interaction, { content: `❌ Ошибка: ${e.message}`, components: [] });
-    } catch (er) {
-      console.error('[handlePetSpeciesButton] Response failed:', er.message);
-    }
+    // Не пытаемся отвечать на ошибку - interaction может быть невалидным
   }
 }
 

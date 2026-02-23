@@ -86,25 +86,25 @@ async function handleButton(interaction) {
 
   // Pet species buttons
   if (customId && customId.startsWith('pet_species_button_')) {
-    try { await handlePetSpeciesButton(interaction); } catch (err) { console.error('Pet species button error', err); await safeReply(interaction, { content: 'Ошибка при выборе вида.', ephemeral: true }); }
+    try { await handlePetSpeciesButton(interaction); } catch (err) { console.error('Pet species button error', err.message); }
     return;
   }
 
   // Pet breed buttons
   if (customId && customId.startsWith('pet_breed_button_')) {
-    try { await handlePetBreedButton(interaction); } catch (err) { console.error('Pet breed button error', err); await safeReply(interaction, { content: 'Ошибка при выборе породы.', ephemeral: true }); }
+    try { await handlePetBreedButton(interaction); } catch (err) { console.error('Pet breed button error', err.message); }
     return;
   }
 
   // Pet action buttons
   if (customId && customId.startsWith('pet_')) {
-    try { await handlePetButton(interaction); } catch (err) { console.error('Pet button error', err); await safeReply(interaction, { content: 'Ошибка при управлении питомцем.', ephemeral: true }); }
+    try { await handlePetButton(interaction); } catch (err) { console.error('Pet button error', err.message); }
     return;
   }
 
   // My pets list button
   if (customId === 'my_pets_list') {
-    try { await handleMyPetsList(interaction); } catch (err) { console.error('My pets list error', err); await safeReply(interaction, { content: 'Ошибка при загрузке питомцев.', ephemeral: true }); }
+    try { await handleMyPetsList(interaction); } catch (err) { console.error('My pets list error', err.message); }
     return;
   }
 }

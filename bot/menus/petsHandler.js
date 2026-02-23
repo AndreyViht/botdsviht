@@ -154,21 +154,32 @@ async function handlePetSpeciesSelect(interaction) {
 
 async function handlePetBreedSelect(interaction) {
   try {
-    if (!interaction || !interaction.values) {
-      throw new Error('Invalid interaction object');
+    console.log(`[handlePetBreedSelect] Start`);
+    console.log(`[handlePetBreedSelect] Values: ${JSON.stringify(interaction.values)}`);
+    
+    if (!interaction.values || !interaction.values[0]) {
+      throw new Error('No values in interaction');
     }
 
     const [species, breedIdx] = interaction.values[0].split('_');
-    const breed = SPECIES[species]?.breeds[parseInt(breedIdx)];
+    console.log(`[handlePetBreedSelect] Parsed - Species: ${species}, BreedIdx: ${breedIdx}`);
+    
+    if (!SPECIES[species]) {
+      throw new Error(`Unknown species: ${species}`);
+    }
+
+    const breed = SPECIES[species].breeds[parseInt(breedIdx)];
+    console.log(`[handlePetBreedSelect] Breed: ${breed}`);
     
     if (!breed) {
-      throw new Error(`Invalid species or breed: ${species}/${breedIdx}`);
+      throw new Error(`Invalid breed index: ${breedIdx}`);
     }
     
     // Проверка лимита питомцев
     const userPets = db.getUserPets(interaction.user.id);
     if (userPets.length >= 3) {
-      await interaction.reply({
+      console.log('[handlePetBreedSelect] User has reached pet limit');
+      await safeReply(interaction, {
         content: '❌ Вы достигли лимита в 3 питомца. Удалите старого питомца или подождите, чтобы создать нового.',
         ephemeral: true
       });
@@ -192,9 +203,12 @@ async function handlePetBreedSelect(interaction) {
       )
     );
 
+    console.log('[handlePetBreedSelect] Showing modal');
     await interaction.showModal(modal);
+    console.log('[handlePetBreedSelect] Modal shown successfully');
   } catch (e) {
     console.error('handlePetBreedSelect error', e && e.message ? e.message : e);
+    console.error('Error stack:', e?.stack);
   }
 }
 

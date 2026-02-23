@@ -102,16 +102,28 @@ async function handleButton(interaction) {
 
 async function handleSelectMenu(interaction) {
   const customId = interaction.customId;
+  console.log(`[SELECT_MENU] Received select menu: ${customId}, type: ${interaction.constructor.name}`);
 
   // Pet species select
   if (customId === 'pet_species_select') {
-    try { await handlePetSpeciesSelect(interaction); } catch (err) { console.error('Pet species select error', err); await safeReply(interaction, { content: 'Ошибка при выборе вида.', ephemeral: true }); }
+    try { 
+      await handlePetSpeciesSelect(interaction); 
+    } catch (err) { 
+      console.error('Pet species select error', err.message); 
+      await safeReply(interaction, { content: 'Ошибка при выборе вида.', ephemeral: true }).catch(() => {}); 
+    }
     return;
   }
 
   // Pet breed select
   if (customId && customId.startsWith('pet_breed_select_')) {
-    try { await handlePetBreedSelect(interaction); } catch (err) { console.error('Pet breed select error', err); await safeReply(interaction, { content: 'Ошибка при выборе породы.', ephemeral: true }); }
+    try { 
+      console.log(`[BREED_SELECT] Processing breed select: ${customId}`);
+      await handlePetBreedSelect(interaction); 
+    } catch (err) { 
+      console.error('Pet breed select error:', err.message, err.stack); 
+      await safeReply(interaction, { content: 'Ошибка при выборе породы.', ephemeral: true }).catch(() => {}); 
+    }
     return;
   }
 }

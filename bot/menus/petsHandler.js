@@ -154,29 +154,36 @@ async function handlePetSpeciesSelect(interaction) {
 
 async function handlePetBreedSelect(interaction) {
   try {
-    console.log(`[handlePetBreedSelect] START - values:`, interaction.values);
+    console.log(`[handlePetBreedSelect] START`);
     
-    // Извлекаем данные ДО показа модали
+    // ПЕРВОЕ: Дефирим interaction, чтобы сказать Discord что мы его получили
+    // Это ОБЯЗАТЕЛЬНО перед showModal()
+    await interaction.deferUpdate();
+    console.log('[handlePetBreedSelect] Deferred');
+    
+    // ТЕПЕРЬ можем работать с данными
     const [species, breedIdx] = interaction.values[0].split('_');
+    console.log(`[handlePetBreedSelect] Species: ${species}, Breed: ${SPECIES[species]?.breeds?.[parseInt(breedIdx)]}`);
     
     if (!SPECIES[species] || !SPECIES[species].breeds[parseInt(breedIdx)]) {
       console.error('[handlePetBreedSelect] Invalid species or breed');
-      await interaction.reply({ content: '❌ Неверный вид или порода.', ephemeral: true });
+      // После дефера нельзя reply(), только editReply()
+      await interaction.editReply({ content: '❌ Неверный вид или порода.' });
       return;
     }
     
-    // Проверка лимита ДО показа модали
+    // Проверка лимита
     const userPets = db.getUserPets(interaction.user.id);
     if (userPets.length >= 3) {
       console.log('[handlePetBreedSelect] Pet limit reached');
-      await interaction.reply({
+      await interaction.editReply({
         content: '❌ Вы достигли лимита в 3 питомца.',
-        ephemeral: true
+        components: []
       });
       return;
     }
     
-    // СРАЗУ показываем модаль БЕЗ дефера
+    // Создаём модаль
     const modal = new ModalBuilder()
       .setCustomId(`pet_name_modal_${species}_${breedIdx}`)
       .setTitle(`Создание ${SPECIES[species].label.replace(/[🐶🐱🐭🐦🦊]\s/, '')}`);
@@ -193,21 +200,21 @@ async function handlePetBreedSelect(interaction) {
       )
     );
 
-    console.log('[handlePetBreedSelect] Showing modal NOW');
+    console.log('[handlePetBreedSelect] Showing modal');
+    // После дефера showModal() должен работать
     await interaction.showModal(modal);
-    console.log('[handlePetBreedSelect] Modal shown OK');
+    console.log('[handlePetBreedSelect] Modal shown');
     
   } catch (e) {
     console.error('[handlePetBreedSelect] ERROR:', e.message);
     try {
-      if (interaction.isRepliable()) {
-        await interaction.reply({ 
-          content: `❌ Ошибка: ${e.message}`, 
-          ephemeral: true 
-        });
-      }
+      // Пытаемся отредактировать, потому что interaction уже дефирен
+      await interaction.editReply({ 
+        content: `❌ Ошибка: ${e.message}`,
+        components: []
+      }).catch(() => {});
     } catch (er) {
-      console.error('[handlePetBreedSelect] Could not reply:', er.message);
+      console.error('[handlePetBreedSelect] Could not editReply:', er.message);
     }
   }
 }

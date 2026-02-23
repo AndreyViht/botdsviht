@@ -118,7 +118,8 @@ async function handlePetSpeciesButton(interaction) {
     const species = interaction.customId.replace('pet_species_button_', '');
     console.log(`[handlePetSpeciesButton] Species extracted: ${species}`);
     
-    console.log(`[handlePetSpeciesButton] Breed buttons created: ${breeds.length}`);
+    const breeds = SPECIES[species]?.breeds;
+    console.log(`[handlePetSpeciesButton] Breed buttons created: ${breeds?.length}`);
     
     if (!SPECIES[species]) {
       console.error('[handlePetSpeciesButton] Unknown species:', species);

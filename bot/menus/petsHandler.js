@@ -154,14 +154,14 @@ async function handlePetSpeciesSelect(interaction) {
 
 async function handlePetBreedSelect(interaction) {
   try {
-    console.log(`[handlePetBreedSelect] START`);
+    console.log(`[handlePetBreedSelect] START - deferred: ${interaction.deferred}`);
     
     const [species, breedIdx] = interaction.values[0].split('_');
     console.log(`[handlePetBreedSelect] Species: ${species}, Breed: ${SPECIES[species]?.breeds?.[parseInt(breedIdx)]}`);
     
     if (!SPECIES[species] || !SPECIES[species].breeds[parseInt(breedIdx)]) {
       console.error('[handlePetBreedSelect] Invalid species or breed');
-      await interaction.reply({ content: '❌ Неверный вид или порода.', ephemeral: true });
+      await interaction.editReply({ content: '❌ Неверный вид или порода.', components: [] });
       return;
     }
     
@@ -169,9 +169,9 @@ async function handlePetBreedSelect(interaction) {
     const userPets = db.getUserPets(interaction.user.id);
     if (userPets.length >= 3) {
       console.log('[handlePetBreedSelect] Pet limit reached');
-      await interaction.reply({
+      await interaction.editReply({
         content: '❌ Вы достигли лимита в 3 питомца.',
-        flags: 64 // ephemeral
+        components: []
       });
       return;
     }
@@ -193,20 +193,19 @@ async function handlePetBreedSelect(interaction) {
       )
     );
 
-    console.log('[handlePetBreedSelect] Showing modal');
-    // Просто вызываем showModal() без deferUpdate()
+    console.log('[handlePetBreedSelect] Calling showModal');
     await interaction.showModal(modal);
-    console.log('[handlePetBreedSelect] Modal shown');
+    console.log('[handlePetBreedSelect] Modal shown - OK');
     
   } catch (e) {
     console.error('[handlePetBreedSelect] ERROR:', e.message);
     try {
-      await interaction.reply({ 
+      await interaction.editReply({ 
         content: `❌ Ошибка: ${e.message}`,
-        flags: 64
+        components: []
       }).catch(() => {});
     } catch (er) {
-      console.error('[handlePetBreedSelect] Could not reply:', er.message);
+      console.error('[handlePetBreedSelect] editReply failed:', er.message);
     }
   }
 }

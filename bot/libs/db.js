@@ -9,7 +9,8 @@ async function initDb() {
   if (db) return db;
   // Use dynamic import for ESM module support
   const { Low } = await import('lowdb');
-  const { JSONFile } = await import('lowdb/node');
+  const lowdbModule = await import('lowdb/node');
+  const JSONFile = lowdbModule.JSONFile;
   
   const dbFile = path.join(__dirname, '..', '..', 'db.json');
   const adapter = new JSONFile(dbFile);

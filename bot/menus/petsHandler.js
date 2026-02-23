@@ -154,8 +154,16 @@ async function handlePetSpeciesSelect(interaction) {
 
 async function handlePetBreedSelect(interaction) {
   try {
+    if (!interaction || !interaction.values) {
+      throw new Error('Invalid interaction object');
+    }
+
     const [species, breedIdx] = interaction.values[0].split('_');
-    const breed = SPECIES[species].breeds[parseInt(breedIdx)];
+    const breed = SPECIES[species]?.breeds[parseInt(breedIdx)];
+    
+    if (!breed) {
+      throw new Error(`Invalid species or breed: ${species}/${breedIdx}`);
+    }
     
     // Проверка лимита питомцев
     const userPets = db.getUserPets(interaction.user.id);

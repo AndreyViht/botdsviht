@@ -1,7 +1,7 @@
 const { InteractionType } = require('discord.js');
 const { safeReply, safeUpdate, safeShowModal } = require('../libs/interactionUtils');
 const { handleMenuButton } = require('../menus/menuHandler');
-const { handlePetSpeciesSelect, handlePetBreedButton, handlePetButton, handleMyPetsList } = require('../menus/petsHandler');
+const { handlePetSpeciesButton, handlePetBreedButton, handlePetButton, handleMyPetsList } = require('../menus/petsHandler');
 const { handleReviewButton, handleReviewModal } = require('../commands/reviewsHandler');
 const { handleMusicButton } = require('../commands/musicHandler');
 
@@ -36,11 +36,7 @@ module.exports = {
         return;
       }
 
-      if (interaction.isStringSelectMenu()) {
-        // НЕ дефирим! Просто передаём на обработку
-        await handleSelectMenu(interaction);
-        return;
-      }
+
 
       if (interaction.isModalSubmit()) {
         await handleModalSubmit(interaction);
@@ -88,6 +84,12 @@ async function handleButton(interaction) {
     return;
   }
 
+  // Pet species buttons
+  if (customId && customId.startsWith('pet_species_button_')) {
+    try { await handlePetSpeciesButton(interaction); } catch (err) { console.error('Pet species button error', err); await safeReply(interaction, { content: 'Ошибка при выборе вида.', ephemeral: true }); }
+    return;
+  }
+
   // Pet breed buttons
   if (customId && customId.startsWith('pet_breed_button_')) {
     try { await handlePetBreedButton(interaction); } catch (err) { console.error('Pet breed button error', err); await safeReply(interaction, { content: 'Ошибка при выборе породы.', ephemeral: true }); }
@@ -105,26 +107,6 @@ async function handleButton(interaction) {
     try { await handleMyPetsList(interaction); } catch (err) { console.error('My pets list error', err); await safeReply(interaction, { content: 'Ошибка при загрузке питомцев.', ephemeral: true }); }
     return;
   }
-}
-
-async function handleSelectMenu(interaction) {
-  const customId = interaction.customId;
-  console.log(`[SELECT_MENU] Received: ${customId}`);
-
-  // Pet species select
-  if (customId === 'pet_species_select') {
-    try { 
-      await handlePetSpeciesSelect(interaction); 
-    } catch (err) { 
-      console.error('[SELECT_MENU] Species select error:', err.message); 
-      try {
-        await safeReply(interaction, { content: 'Ошибка при выборе вида.', ephemeral: true });
-      } catch (e) {}
-    }
-    return;
-  }
-
-
 }
 
 async function handleModalSubmit(interaction) {

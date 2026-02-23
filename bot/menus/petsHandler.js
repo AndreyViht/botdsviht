@@ -92,17 +92,14 @@ function makePetManagementEmbed() {
 function makePetManagementRows() {
   return [
     new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('pet_species_select')
-        .setPlaceholder('🐾 Выбер вид питомца')
-        .addOptions(
-          Object.entries(SPECIES).map(([key, { label, emoji }]) => ({
-            label: label.replace(emoji + ' ', ''),
-            value: key,
-            emoji: emoji,
-            description: `Создать нового ${label}`
-          }))
-        )
+      new ButtonBuilder()
+        .setCustomId('pet_species_button_dog')
+        .setLabel('🐶 Щенок')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('pet_species_button_cat')
+        .setLabel('🐱 Кошка')
+        .setStyle(ButtonStyle.Primary)
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -113,12 +110,13 @@ function makePetManagementRows() {
   ];
 }
 
-async function handlePetSpeciesSelect(interaction) {
+async function handlePetSpeciesButton(interaction) {
   try {
-    console.log(`[handlePetSpeciesSelect] START`);
+    console.log(`[handlePetSpeciesButton] START`);
     
-    const species = interaction.values[0];
-    const breeds = SPECIES[species].breeds;
+    // Извлекаем вид из customId: pet_species_button_dog или pet_species_button_cat
+    const species = interaction.customId.replace('pet_species_button_', '');
+    const breeds = SPECIES[species]?.breeds;
     
     if (!SPECIES[species]) {
       await interaction.reply({ content: '❌ Неверный вид питомца.', flags: 64 });
@@ -148,7 +146,7 @@ async function handlePetSpeciesSelect(interaction) {
       rows.push(new ActionRowBuilder().addComponents(breedButtons.slice(i, i + 5)));
     }
 
-    console.log('[handlePetSpeciesSelect] Showing breed selection');
+    console.log('[handlePetSpeciesButton] Showing breed selection');
     await safeUpdate(interaction, {
       embeds: [
         new EmbedBuilder()
@@ -160,11 +158,11 @@ async function handlePetSpeciesSelect(interaction) {
     });
     
   } catch (e) {
-    console.error('[handlePetSpeciesSelect] ERROR:', e.message);
+    console.error('[handlePetSpeciesButton] ERROR:', e.message);
     try {
       await safeUpdate(interaction, { content: `❌ Ошибка: ${e.message}`, components: [] });
     } catch (er) {
-      console.error('[handlePetSpeciesSelect] Response failed:', er.message);
+      console.error('[handlePetSpeciesButton] Response failed:', er.message);
     }
   }
 }
@@ -499,7 +497,7 @@ async function assignPetRole(interaction, breed, species) {
 }
 module.exports = { 
   ensurePetManagementMessage, 
-  handlePetSpeciesSelect, 
+  handlePetSpeciesButton, 
   handlePetBreedButton, 
   handlePetNameModal, 
   handlePetButton,

@@ -147,6 +147,7 @@ async function handlePetSpeciesButton(interaction) {
     }
 
     console.log('[handlePetSpeciesButton] Showing breed selection');
+    // Используем safeUpdate который делает дефер внутри
     await safeUpdate(interaction, {
       embeds: [
         new EmbedBuilder()
@@ -209,17 +210,20 @@ async function handlePetBreedButton(interaction) {
       )
     );
 
-    console.log('[handlePetBreedButton] Showing name modal');
-    await interaction.showModal(modal);
+    console.log('[handlePetBreedButton] Modal shown');
     
   } catch (e) {
-    console.error('[handlePetBreedButton] ERROR:', e.message);
+    console.error('[handlePetBreedButton] ERROR:', e.code || e.message);
+    // Не пытаемся отвечать если это interaction timeout
+    if (e.code === 10062 || e.message?.includes('Unknown interaction')) {
+      console.error('[handlePetBreedButton] Interaction expired, cannot respond');
+      return;
+    }
     try {
-      if (interaction.replied || interaction.deferred) {
-        await interaction.editReply({ content: `❌ Ошибка: ${e.message}`, components: [] }).catch(() => {});
-      } else {
-        await interaction.reply({ content: `❌ Ошибка: ${e.message}`, flags: 64 }).catch(() => {});
-      }
+      await interaction.reply({ 
+        content: `❌ Ошибка: ${e.message}`,
+        flags: 64
+      }).catch(() => {});
     } catch (er) {
       console.error('[handlePetBreedButton] Response failed:', er.message);
     }

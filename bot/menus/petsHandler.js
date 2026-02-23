@@ -341,14 +341,15 @@ async function handlePetButton(interaction) {
         break;
 
       case 'pet':
-        pet.stats.petsCount = (pet.stats.petsCount || 0) + 1;
-        if (pet.stats.petsCount >= 5) {
+        const currentPetsCount = (pet.stats.petsCount || 0) + 1;
+        let finalCount = currentPetsCount;
+        if (currentPetsCount >= 5) {
           message = `✅ ${pet.name} полностью доволен! 😊 (5/5)`;
-          pet.stats.petsCount = 5;
+          finalCount = 5;
         } else {
-          message = `✅ Вы погладили ${pet.name}! (${pet.stats.petsCount}/5)`;
+          message = `✅ Вы погладили ${pet.name}! (${currentPetsCount}/5)`;
         }
-        await db.updatePetStats(petId, { 'stats.petsCount': pet.stats.petsCount });
+        await db.updatePetStats(petId, { 'stats.petsCount': finalCount });
         success = true;
         break;
 
@@ -365,9 +366,9 @@ async function handlePetButton(interaction) {
         break;
 
       case 'nearby':
-        pet.stats.beNearTime = (pet.stats.beNearTime || 0) + 2;
-        await db.updatePetStats(petId, { 'stats.beNearTime': pet.stats.beNearTime });
-        const minutes = Math.floor(pet.stats.beNearTime / 60);
+        const currentBeNearTime = (pet.stats.beNearTime || 0) + 2;
+        await db.updatePetStats(petId, { 'stats.beNearTime': currentBeNearTime });
+        const minutes = Math.floor(currentBeNearTime / 60);
         message = `✅ Вы потратили 2 секунды рядом с ${pet.name}! (${minutes}м всего сегодня)`;
         success = true;
         break;

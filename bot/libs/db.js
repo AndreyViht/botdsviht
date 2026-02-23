@@ -166,7 +166,20 @@ module.exports = {
     if (!db || !db.data) { console.warn('[DB] Not initialized for updatePetStats'); return null; }
     db.data.pets = db.data.pets || {};
     if (!db.data.pets[petId]) return null;
-    db.data.pets[petId] = { ...db.data.pets[petId], ...updates };
+    
+    // Handle nested updates like 'stats.lastFed'
+    for (const [key, value] of Object.entries(updates)) {
+      if (key.includes('.')) {
+        const [parent, child] = key.split('.');
+        if (!db.data.pets[petId][parent]) {
+          db.data.pets[petId][parent] = {};
+        }
+        db.data.pets[petId][parent][child] = value;
+      } else {
+        db.data.pets[petId][key] = value;
+      }
+    }
+    
     try { await safeWrite(); } catch (e) { console.warn('[DB] Write warning:', e.message); }
     return db.data.pets[petId];
   },

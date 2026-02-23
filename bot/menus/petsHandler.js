@@ -154,39 +154,29 @@ async function handlePetSpeciesSelect(interaction) {
 
 async function handlePetBreedSelect(interaction) {
   try {
-    console.log(`[handlePetBreedSelect] Start`);
-    console.log(`[handlePetBreedSelect] Values: ${JSON.stringify(interaction.values)}`);
+    console.log(`[handlePetBreedSelect] START - values:`, interaction.values);
     
-    if (!interaction.values || !interaction.values[0]) {
-      throw new Error('No values in interaction');
-    }
-
+    // Извлекаем данные ДО показа модали
     const [species, breedIdx] = interaction.values[0].split('_');
-    console.log(`[handlePetBreedSelect] Parsed - Species: ${species}, BreedIdx: ${breedIdx}`);
     
-    if (!SPECIES[species]) {
-      throw new Error(`Unknown species: ${species}`);
-    }
-
-    const breed = SPECIES[species].breeds[parseInt(breedIdx)];
-    console.log(`[handlePetBreedSelect] Breed: ${breed}`);
-    
-    if (!breed) {
-      throw new Error(`Invalid breed index: ${breedIdx}`);
+    if (!SPECIES[species] || !SPECIES[species].breeds[parseInt(breedIdx)]) {
+      console.error('[handlePetBreedSelect] Invalid species or breed');
+      await interaction.reply({ content: '❌ Неверный вид или порода.', ephemeral: true });
+      return;
     }
     
-    // Проверка лимита питомцев
+    // Проверка лимита ДО показа модали
     const userPets = db.getUserPets(interaction.user.id);
     if (userPets.length >= 3) {
-      console.log('[handlePetBreedSelect] User has reached pet limit');
-      await safeReply(interaction, {
-        content: '❌ Вы достигли лимита в 3 питомца. Удалите старого питомца или подождите, чтобы создать нового.',
+      console.log('[handlePetBreedSelect] Pet limit reached');
+      await interaction.reply({
+        content: '❌ Вы достигли лимита в 3 питомца.',
         ephemeral: true
       });
       return;
     }
-
-    // Открыть модальное окно для ввода имени
+    
+    // СРАЗУ показываем модаль БЕЗ дефера
     const modal = new ModalBuilder()
       .setCustomId(`pet_name_modal_${species}_${breedIdx}`)
       .setTitle(`Создание ${SPECIES[species].label.replace(/[🐶🐱🐭🐦🦊]\s/, '')}`);
@@ -203,12 +193,22 @@ async function handlePetBreedSelect(interaction) {
       )
     );
 
-    console.log('[handlePetBreedSelect] Showing modal');
+    console.log('[handlePetBreedSelect] Showing modal NOW');
     await interaction.showModal(modal);
-    console.log('[handlePetBreedSelect] Modal shown successfully');
+    console.log('[handlePetBreedSelect] Modal shown OK');
+    
   } catch (e) {
-    console.error('handlePetBreedSelect error', e && e.message ? e.message : e);
-    console.error('Error stack:', e?.stack);
+    console.error('[handlePetBreedSelect] ERROR:', e.message);
+    try {
+      if (interaction.isRepliable()) {
+        await interaction.reply({ 
+          content: `❌ Ошибка: ${e.message}`, 
+          ephemeral: true 
+        });
+      }
+    } catch (er) {
+      console.error('[handlePetBreedSelect] Could not reply:', er.message);
+    }
   }
 }
 

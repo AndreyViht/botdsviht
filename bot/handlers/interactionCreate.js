@@ -102,28 +102,26 @@ async function handleButton(interaction) {
 
 async function handleSelectMenu(interaction) {
   const customId = interaction.customId;
-  console.log(`[SELECT_MENU] Received select menu: ${customId}, type: ${interaction.constructor.name}`);
+  console.log(`[SELECT_MENU] Received: ${customId}`);
 
   // Pet species select
   if (customId === 'pet_species_select') {
     try { 
       await handlePetSpeciesSelect(interaction); 
     } catch (err) { 
-      console.error('Pet species select error', err.message); 
-      await safeReply(interaction, { content: 'Ошибка при выборе вида.', ephemeral: true }).catch(() => {}); 
+      console.error('[SELECT_MENU] Species select error:', err.message); 
+      try {
+        await safeReply(interaction, { content: 'Ошибка при выборе вида.', ephemeral: true });
+      } catch (e) {}
     }
     return;
   }
 
   // Pet breed select
   if (customId && customId.startsWith('pet_breed_select_')) {
-    try { 
-      console.log(`[BREED_SELECT] Processing breed select: ${customId}`);
-      await handlePetBreedSelect(interaction); 
-    } catch (err) { 
-      console.error('Pet breed select error:', err.message, err.stack); 
-      await safeReply(interaction, { content: 'Ошибка при выборе породы.', ephemeral: true }).catch(() => {}); 
-    }
+    // НЕ оборачиваем в try-catch, чтобы не пытаться отвечать на уже обработанный interaction
+    console.log(`[SELECT_MENU] Breed select detected: ${customId}`);
+    await handlePetBreedSelect(interaction);
     return;
   }
 }

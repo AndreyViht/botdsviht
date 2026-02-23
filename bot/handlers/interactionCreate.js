@@ -1,6 +1,7 @@
 const { InteractionType } = require('discord.js');
 const { safeReply, safeUpdate, safeShowModal } = require('../libs/interactionUtils');
 const { handleMenuButton } = require('../menus/menuHandler');
+const { handlePetSpeciesSelect, handlePetBreedSelect, handlePetButton, handleMyPetsList } = require('../menus/petsHandler');
 const { handleReviewButton, handleReviewModal } = require('../commands/reviewsHandler');
 const { handleMusicButton } = require('../commands/musicHandler');
 
@@ -32,6 +33,11 @@ module.exports = {
 
       if (interaction.isButton()) {
         await handleButton(interaction);
+        return;
+      }
+
+      if (interaction.isStringSelectMenu()) {
+        await handleSelectMenu(interaction);
         return;
       }
 
@@ -80,6 +86,34 @@ async function handleButton(interaction) {
     try { await handleMusicButton(interaction); } catch (err) { console.error('Music button error', err); await safeReply(interaction, { content: 'Ошибка музыки.', ephemeral: true }); }
     return;
   }
+
+  // Pet buttons
+  if (customId && customId.startsWith('pet_')) {
+    try { await handlePetButton(interaction); } catch (err) { console.error('Pet button error', err); await safeReply(interaction, { content: 'Ошибка при управлении питомцем.', ephemeral: true }); }
+    return;
+  }
+
+  // My pets list button
+  if (customId === 'my_pets_list') {
+    try { await handleMyPetsList(interaction); } catch (err) { console.error('My pets list error', err); await safeReply(interaction, { content: 'Ошибка при загрузке питомцев.', ephemeral: true }); }
+    return;
+  }
+}
+
+async function handleSelectMenu(interaction) {
+  const customId = interaction.customId;
+
+  // Pet species select
+  if (customId === 'pet_species_select') {
+    try { await handlePetSpeciesSelect(interaction); } catch (err) { console.error('Pet species select error', err); await safeReply(interaction, { content: 'Ошибка при выборе вида.', ephemeral: true }); }
+    return;
+  }
+
+  // Pet breed select
+  if (customId && customId.startsWith('pet_breed_select_')) {
+    try { await handlePetBreedSelect(interaction); } catch (err) { console.error('Pet breed select error', err); await safeReply(interaction, { content: 'Ошибка при выборе породы.', ephemeral: true }); }
+    return;
+  }
 }
 
 async function handleModalSubmit(interaction) {
@@ -102,6 +136,15 @@ async function handleModalSubmit(interaction) {
   // Review modal
   if (customId === 'review_modal') {
     try { await handleReviewModal(interaction); } catch (err) { console.error('Review modal error', err); await safeReply(interaction, { content: 'Ошибка при отправке отзыва.', ephemeral: true }); }
+    return;
+  }
+
+  // Pet name modal
+  if (customId && customId.startsWith('pet_name_modal_')) {
+    try {
+      const { handlePetNameModal } = require('../menus/petsHandler');
+      await handlePetNameModal(interaction);
+    } catch (err) { console.error('Pet name modal error', err); await safeReply(interaction, { content: 'Ошибка при создании питомца.', ephemeral: true }); }
     return;
   }
 }

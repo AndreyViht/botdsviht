@@ -37,11 +37,7 @@ module.exports = {
       }
 
       if (interaction.isStringSelectMenu()) {
-        // ВАЖНО: дефирим СРАЗУ для breed select
-        if (interaction.customId && interaction.customId.startsWith('pet_breed_select_')) {
-          console.log('[execute] Deferring breed select interaction');
-          await interaction.deferUpdate().catch(e => console.error('[execute] Defer failed:', e.message));
-        }
+        // НЕ дефирим! Просто передаём на обработку
         await handleSelectMenu(interaction);
         return;
       }

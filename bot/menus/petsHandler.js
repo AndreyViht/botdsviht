@@ -156,19 +156,12 @@ async function handlePetBreedSelect(interaction) {
   try {
     console.log(`[handlePetBreedSelect] START`);
     
-    // ПЕРВОЕ: Дефирим interaction, чтобы сказать Discord что мы его получили
-    // Это ОБЯЗАТЕЛЬНО перед showModal()
-    await interaction.deferUpdate();
-    console.log('[handlePetBreedSelect] Deferred');
-    
-    // ТЕПЕРЬ можем работать с данными
     const [species, breedIdx] = interaction.values[0].split('_');
     console.log(`[handlePetBreedSelect] Species: ${species}, Breed: ${SPECIES[species]?.breeds?.[parseInt(breedIdx)]}`);
     
     if (!SPECIES[species] || !SPECIES[species].breeds[parseInt(breedIdx)]) {
       console.error('[handlePetBreedSelect] Invalid species or breed');
-      // После дефера нельзя reply(), только editReply()
-      await interaction.editReply({ content: '❌ Неверный вид или порода.' });
+      await interaction.reply({ content: '❌ Неверный вид или порода.', ephemeral: true });
       return;
     }
     
@@ -176,9 +169,9 @@ async function handlePetBreedSelect(interaction) {
     const userPets = db.getUserPets(interaction.user.id);
     if (userPets.length >= 3) {
       console.log('[handlePetBreedSelect] Pet limit reached');
-      await interaction.editReply({
+      await interaction.reply({
         content: '❌ Вы достигли лимита в 3 питомца.',
-        components: []
+        flags: 64 // ephemeral
       });
       return;
     }
@@ -201,20 +194,19 @@ async function handlePetBreedSelect(interaction) {
     );
 
     console.log('[handlePetBreedSelect] Showing modal');
-    // После дефера showModal() должен работать
+    // Просто вызываем showModal() без deferUpdate()
     await interaction.showModal(modal);
     console.log('[handlePetBreedSelect] Modal shown');
     
   } catch (e) {
     console.error('[handlePetBreedSelect] ERROR:', e.message);
     try {
-      // Пытаемся отредактировать, потому что interaction уже дефирен
-      await interaction.editReply({ 
+      await interaction.reply({ 
         content: `❌ Ошибка: ${e.message}`,
-        components: []
+        flags: 64
       }).catch(() => {});
     } catch (er) {
-      console.error('[handlePetBreedSelect] Could not editReply:', er.message);
+      console.error('[handlePetBreedSelect] Could not reply:', er.message);
     }
   }
 }

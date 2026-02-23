@@ -154,13 +154,15 @@ async function handlePetSpeciesSelect(interaction) {
 
 async function handlePetBreedSelect(interaction) {
   try {
+    await interaction.deferReply({ ephemeral: true });
+
     const [species, breedIdx] = interaction.values[0].split('_');
     const breed = SPECIES[species].breeds[parseInt(breedIdx)];
     
     // Проверка лимита питомцев
     const userPets = db.getUserPets(interaction.user.id);
     if (userPets.length >= 3) {
-      await interaction.reply({
+      await interaction.editReply({
         content: '❌ Вы достигли лимита в 3 питомца. Удалите старого питомца или подождите, чтобы создать нового.',
         ephemeral: true
       });

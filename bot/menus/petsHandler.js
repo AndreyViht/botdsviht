@@ -277,9 +277,6 @@ async function handlePetNameModal(interaction) {
     const lastMsg = messages.first();
     if (lastMsg) await lastMsg.pin().catch(() => {});
 
-    // Выдать роль владельцу
-    await assignPetRole(interaction, breed, species);
-
     // Ответить
     await interaction.editReply({
       content: `✅ Питомец **${name}** (${breed}) успешно создан! Перейдите в ветку <#${thread.id}> для управления.`,
@@ -485,25 +482,6 @@ async function handleMyPetsList(interaction) {
   }
 }
 
-async function assignPetRole(interaction, breed, species) {
-  try {
-    const guild = interaction.guild;
-    const roleName = `Питомец: ${breed}`;
-    
-    let role = guild.roles.cache.find(r => r.name === roleName);
-    if (!role) {
-      role = await guild.roles.create({
-        name: roleName,
-        color: getColorForSpecies(species),
-        reason: `Auto-created pet role for ${breed}`
-      });
-    }
-
-    await interaction.member.roles.add(role);
-  } catch (e) {
-    console.error('assignPetRole error', e && e.message ? e.message : e);
-  }
-}
 module.exports = { 
   ensurePetManagementMessage, 
   handlePetSpeciesButton, 

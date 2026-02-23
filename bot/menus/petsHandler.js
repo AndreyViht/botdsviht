@@ -6,11 +6,8 @@ const PETS_CATEGORY_ID = '1475597891388047612';
 const PETS_CHANNEL_ID = '1475598451122376704';
 
 const SPECIES = {
-  puppy: { label: '🐶 Щенок', emoji: '🐶', breeds: ['Овчарка', 'Лабрадор', 'Хаски', 'Чихуахуа', 'Бульдог', 'Золотистый ретривер', 'Пудель', 'Спаниель', 'Пинчер', 'Шпиц'] },
-  cat: { label: '🐱 Кошка', emoji: '🐱', breeds: ['Персидская', 'Сиамская', 'Британская', 'Мейн-кун', 'Рэгдолл', 'Бенгальская', 'Сфинкс', 'Абиссинская', 'Бирманская', 'Девон-рекс'] },
-  mouse: { label: '🐭 Мышь', emoji: '🐭', breeds: ['Белая', 'Чёрная', 'Полосатая', 'Пёстрая', 'Альбиносс', 'Голубая', 'Кремовая', 'Шоколадная', 'Серебристая', 'Дамбо'] },
-  bird: { label: '🐦 Птица', emoji: '🐦', breeds: ['Волнистый попугайчик', 'Ара', 'Какаду', 'Канарейка', 'Соловей', 'Синица', 'Щегол', 'Снегирь', 'Корелла', 'Амадина'] },
-  mammal: { label: '🦊 Млекопитающие', emoji: '🦊', breeds: ['Хомяк', 'Крыса', 'Белка', 'Кролик', 'Енот', 'Ёж', 'Лиса', 'Зайчиха', 'Сурок', 'Бобр'] }
+  dog: { label: '🐶 Щенок', emoji: '🐶', breeds: ['Малинуа', 'Немецкая овчарка'] },
+  cat: { label: '🐱 Кошка', emoji: '🐱', breeds: ['Майкун', 'Кошка'] }
 };
 
 const FEEDING_WINDOWS = [
@@ -21,11 +18,8 @@ const FEEDING_WINDOWS = [
 
 function getColorForSpecies(species) {
   const colors = {
-    puppy: 0xD4A574,   // коричневый
-    cat: 0xFFA500,     // оранжевый
-    mouse: 0x808080,   // серый
-    bird: 0x87CEEB,    // небесный
-    mammal: 0x8B4513   // седельно-коричневый
+    dog: 0xD4A574,     // коричневый
+    cat: 0xFFA500      // оранжевый
   };
   return colors[species] || 0x6a5acd;
 }
@@ -121,45 +115,13 @@ function makePetManagementRows() {
 
 async function handlePetSpeciesSelect(interaction) {
   try {
+    console.log(`[handlePetSpeciesSelect] START`);
+    
     const species = interaction.values[0];
     const breeds = SPECIES[species].breeds;
     
-    const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`pet_breed_select_${species}`)
-        .setPlaceholder('🐾 Выбер породу')
-        .addOptions(
-          breeds.map((breed, idx) => ({
-            label: breed,
-            value: `${species}_${idx}`,
-            description: `Порода ${breed}`
-          }))
-        )
-    );
-
-    await safeUpdate(interaction, {
-      embeds: [
-        new EmbedBuilder()
-          .setTitle(`${SPECIES[species].label} — Выбор породы`)
-          .setColor(getColorForSpecies(species))
-          .setDescription('Выберите породу вашего будущего питомца')
-      ],
-      components: [row]
-    });
-  } catch (e) {
-    console.error('handlePetSpeciesSelect error', e && e.message ? e.message : e);
-    try { await safeUpdate(interaction, { content: 'Ошибка при выборе вида.', components: [] }); } catch (er) {}
-  }
-}
-
-async function handlePetBreedSelect(interaction) {
-  try {
-    console.log(`[handlePetBreedSelect] START`);
-    
-    const [species, breedIdx] = interaction.values[0].split('_');
-    
-    if (!SPECIES[species] || !SPECIES[species].breeds[parseInt(breedIdx)]) {
-      await interaction.reply({ content: '❌ Неверный вид или порода.', flags: 64 });
+    if (!SPECIES[species]) {
+      await interaction.reply({ content: '❌ Неверный вид питомца.', flags: 64 });
       return;
     }
     
@@ -173,10 +135,69 @@ async function handlePetBreedSelect(interaction) {
       return;
     }
     
-    // Создаём модаль
+    // Создаём кнопки для выбора породы
+    const breedButtons = breeds.map((breed, idx) =>
+      new ButtonBuilder()
+        .setCustomId(`pet_breed_button_${species}_${idx}`)
+        .setLabel(breed)
+        .setStyle(ButtonStyle.Primary)
+    );
+
+    const rows = [];
+    for (let i = 0; i < breedButtons.length; i += 5) {
+      rows.push(new ActionRowBuilder().addComponents(breedButtons.slice(i, i + 5)));
+    }
+
+    console.log('[handlePetSpeciesSelect] Showing breed selection');
+    await safeUpdate(interaction, {
+      embeds: [
+        new EmbedBuilder()
+          .setTitle(`${SPECIES[species].label} — Выбор породы`)
+          .setColor(getColorForSpecies(species))
+          .setDescription('Выберите породу вашего будущего питомца')
+      ],
+      components: rows
+    });
+    
+  } catch (e) {
+    console.error('[handlePetSpeciesSelect] ERROR:', e.message);
+    try {
+      await safeUpdate(interaction, { content: `❌ Ошибка: ${e.message}`, components: [] });
+    } catch (er) {
+      console.error('[handlePetSpeciesSelect] Response failed:', er.message);
+    }
+  }
+}
+
+async function handlePetBreedButton(interaction) {
+  try {
+    console.log(`[handlePetBreedButton] START`);
+    
+    const customId = interaction.customId; // pet_breed_button_dog_0
+    const parts = customId.replace('pet_breed_button_', '').split('_');
+    const species = parts[0];
+    const breedIdx = parseInt(parts[1]);
+    
+    if (!SPECIES[species] || !SPECIES[species].breeds[breedIdx]) {
+      await interaction.reply({ content: '❌ Неверный вид или порода.', flags: 64 });
+      return;
+    }
+    
+    // Проверка лимита (ещё раз)
+    const userPets = db.getUserPets(interaction.user.id);
+    if (userPets.length >= 3) {
+      await interaction.reply({
+        content: '❌ Вы достигли лимита в 3 питомца.',
+        flags: 64
+      });
+      return;
+    }
+    
+    // Открываем модаль для ввода имени
+    const breed = SPECIES[species].breeds[breedIdx];
     const modal = new ModalBuilder()
       .setCustomId(`pet_name_modal_${species}_${breedIdx}`)
-      .setTitle(`Создание ${SPECIES[species].label.replace(/[🐶🐱🐭🐦🦊]\s/, '')}`);
+      .setTitle(`${SPECIES[species].label} — ${breed}`);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(
@@ -190,11 +211,11 @@ async function handlePetBreedSelect(interaction) {
       )
     );
 
-    // showModal() работает БЕЗ дефера, нужна максимальная скорость
+    console.log('[handlePetBreedButton] Showing name modal');
     await interaction.showModal(modal);
     
   } catch (e) {
-    console.error('[handlePetBreedSelect] ERROR:', e.code, e.message);
+    console.error('[handlePetBreedButton] ERROR:', e.message);
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.editReply({ content: `❌ Ошибка: ${e.message}`, components: [] }).catch(() => {});
@@ -202,7 +223,7 @@ async function handlePetBreedSelect(interaction) {
         await interaction.reply({ content: `❌ Ошибка: ${e.message}`, flags: 64 }).catch(() => {});
       }
     } catch (er) {
-      console.error('[handlePetBreedSelect] Response failed:', er.message);
+      console.error('[handlePetBreedButton] Response failed:', er.message);
     }
   }
 }
@@ -476,11 +497,10 @@ async function assignPetRole(interaction, breed, species) {
     console.error('assignPetRole error', e && e.message ? e.message : e);
   }
 }
-
 module.exports = { 
   ensurePetManagementMessage, 
   handlePetSpeciesSelect, 
-  handlePetBreedSelect, 
+  handlePetBreedButton, 
   handlePetNameModal, 
   handlePetButton,
   handleMyPetsList

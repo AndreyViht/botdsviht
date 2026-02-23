@@ -1,7 +1,7 @@
 const { InteractionType } = require('discord.js');
 const { safeReply, safeUpdate, safeShowModal } = require('../libs/interactionUtils');
 const { handleMenuButton } = require('../menus/menuHandler');
-const { handlePetSpeciesSelect, handlePetBreedSelect, handlePetButton, handleMyPetsList } = require('../menus/petsHandler');
+const { handlePetSpeciesSelect, handlePetBreedButton, handlePetButton, handleMyPetsList } = require('../menus/petsHandler');
 const { handleReviewButton, handleReviewModal } = require('../commands/reviewsHandler');
 const { handleMusicButton } = require('../commands/musicHandler');
 
@@ -88,7 +88,13 @@ async function handleButton(interaction) {
     return;
   }
 
-  // Pet buttons
+  // Pet breed buttons
+  if (customId && customId.startsWith('pet_breed_button_')) {
+    try { await handlePetBreedButton(interaction); } catch (err) { console.error('Pet breed button error', err); await safeReply(interaction, { content: 'Ошибка при выборе породы.', ephemeral: true }); }
+    return;
+  }
+
+  // Pet action buttons
   if (customId && customId.startsWith('pet_')) {
     try { await handlePetButton(interaction); } catch (err) { console.error('Pet button error', err); await safeReply(interaction, { content: 'Ошибка при управлении питомцем.', ephemeral: true }); }
     return;
@@ -118,13 +124,7 @@ async function handleSelectMenu(interaction) {
     return;
   }
 
-  // Pet breed select
-  if (customId && customId.startsWith('pet_breed_select_')) {
-    // НЕ оборачиваем в try-catch, чтобы не пытаться отвечать на уже обработанный interaction
-    console.log(`[SELECT_MENU] Breed select detected: ${customId}`);
-    await handlePetBreedSelect(interaction);
-    return;
-  }
+
 }
 
 async function handleModalSubmit(interaction) {

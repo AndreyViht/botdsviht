@@ -51,6 +51,7 @@ module.exports = {
 
 async function handleButton(interaction) {
   const customId = interaction.customId;
+  console.log(`[handleButton] Received button: ${customId}`);
 
   // Verification button
   if (customId === 'verify_start') {

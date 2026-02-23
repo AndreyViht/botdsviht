@@ -112,13 +112,16 @@ function makePetManagementRows() {
 
 async function handlePetSpeciesButton(interaction) {
   try {
-    console.log(`[handlePetSpeciesButton] START`);
+    console.log(`[handlePetSpeciesButton] START - customId: ${interaction.customId}`);
     
     // Извлекаем вид из customId: pet_species_button_dog или pet_species_button_cat
     const species = interaction.customId.replace('pet_species_button_', '');
-    const breeds = SPECIES[species]?.breeds;
+    console.log(`[handlePetSpeciesButton] Species extracted: ${species}`);
+    
+    console.log(`[handlePetSpeciesButton] Breed buttons created: ${breeds.length}`);
     
     if (!SPECIES[species]) {
+      console.error('[handlePetSpeciesButton] Unknown species:', species);
       await interaction.reply({ content: '❌ Неверный вид питомца.', flags: 64 });
       return;
     }
@@ -146,7 +149,7 @@ async function handlePetSpeciesButton(interaction) {
       rows.push(new ActionRowBuilder().addComponents(breedButtons.slice(i, i + 5)));
     }
 
-    console.log('[handlePetSpeciesButton] Showing breed selection');
+    console.log('[handlePetSpeciesButton] Updating message with breed buttons');
     // Используем обычный update который безопасен для кнопок
     await interaction.update({
       embeds: [
@@ -157,21 +160,23 @@ async function handlePetSpeciesButton(interaction) {
       ],
       components: rows
     });
+    console.log('[handlePetSpeciesButton] Message updated successfully');
     
   } catch (e) {
-    console.error('[handlePetSpeciesButton] ERROR:', e.message);
+    console.error('[handlePetSpeciesButton] ERROR:', e.code, e.message);
     // Не пытаемся отвечать на ошибку - interaction может быть невалидным
   }
 }
 
 async function handlePetBreedButton(interaction) {
   try {
-    console.log(`[handlePetBreedButton] START`);
+    console.log(`[handlePetBreedButton] START - customId: ${interaction.customId}`);
     
     const customId = interaction.customId; // pet_breed_button_dog_0
     const parts = customId.replace('pet_breed_button_', '').split('_');
     const species = parts[0];
     const breedIdx = parseInt(parts[1]);
+    console.log(`[handlePetBreedButton] Parsed - species: ${species}, breedIdx: ${breedIdx}`);
     
     if (!SPECIES[species] || !SPECIES[species].breeds[breedIdx]) {
       await interaction.reply({ content: '❌ Неверный вид или порода.', flags: 64 });
@@ -206,10 +211,13 @@ async function handlePetBreedButton(interaction) {
       )
     );
 
-    console.log('[handlePetBreedButton] Modal shown');
+    console.log(`[handlePetBreedButton] Modal created, calling showModal`);
+    // Просто вызываем showModal - больше ничего
+    await interaction.showModal(modal);
+    console.log('[handlePetBreedButton] showModal called successfully');
     
   } catch (e) {
-    console.error('[handlePetBreedButton] ERROR:', e.code || e.message);
+    console.error('[handlePetBreedButton] ERROR:', e.code, e.message);
     // Не пытаемся отвечать если это interaction timeout
     if (e.code === 10062 || e.message?.includes('Unknown interaction')) {
       console.error('[handlePetBreedButton] Interaction expired, cannot respond');

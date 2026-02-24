@@ -20,10 +20,7 @@ async function initDb() {
     welcome: null, 
     stats: { aiRequests: 0 }, 
     rulesPosted: null, 
-    supportPanelPosted: null,
-    pets: {},         // { petId: { owner_id, species, breed, name, thread_id, status, age_weeks, stats: { lastFed, lastBathed, lastWalked, lastCleaned, petsCount, beNear } } }
-    threads: {},      // { thread_id: pet_id }
-    petManagementMsg: null // { channelId, messageId }
+    supportPanelPosted: null
   };
   db = new Low(adapter, defaultData);
   
@@ -111,116 +108,5 @@ module.exports = {
       return null; 
     }
     return db.data;
-  },
-
-  // === Pet Management Methods ===
-  
-  // Get all pets for a user
-  getUserPets: (userId) => {
-    if (!dbInitialized || !db || !db.data) return [];
-    db.data.pets = db.data.pets || {};
-    return Object.values(db.data.pets).filter(p => p.owner_id === userId);
-  },
-
-  // Get pet by ID
-  getPet: (petId) => {
-    if (!dbInitialized || !db || !db.data) return null;
-    db.data.pets = db.data.pets || {};
-    return db.data.pets[petId] || null;
-  },
-
-  // Add new pet
-  addPet: async (petId, petData) => {
-    await dbReady;
-    if (!db || !db.data) { console.warn('[DB] Not initialized for addPet'); return null; }
-    db.data.pets = db.data.pets || {};
-    db.data.pets[petId] = {
-      id: petId,
-      owner_id: petData.owner_id,
-      species: petData.species,
-      breed: petData.breed,
-      name: petData.name,
-      thread_id: petData.thread_id,
-      created_at: Date.now(),
-      age_weeks: 0,
-      status: 'healthy',
-      stats: {
-        lastFed: Date.now(),
-        lastBathed: Date.now(),
-        lastWalked: Date.now(),
-        lastCleaned: Date.now(),
-        petsCount: 0,        // кол-во поглаживаний сегодня
-        beNearTime: 0        // секунды рядом сегодня
-      }
-    };
-    if (petData.thread_id) {
-      db.data.threads = db.data.threads || {};
-      db.data.threads[petData.thread_id] = petId;
-    }
-    try { await safeWrite(); } catch (e) { console.warn('[DB] Write warning:', e.message); }
-    return db.data.pets[petId];
-  },
-
-  // Update pet stats
-  updatePetStats: async (petId, updates) => {
-    await dbReady;
-    if (!db || !db.data) { console.warn('[DB] Not initialized for updatePetStats'); return null; }
-    db.data.pets = db.data.pets || {};
-    if (!db.data.pets[petId]) return null;
-    
-    // Handle nested updates like 'stats.lastFed'
-    for (const [key, value] of Object.entries(updates)) {
-      if (key.includes('.')) {
-        const [parent, child] = key.split('.');
-        if (!db.data.pets[petId][parent]) {
-          db.data.pets[petId][parent] = {};
-        }
-        db.data.pets[petId][parent][child] = value;
-      } else {
-        db.data.pets[petId][key] = value;
-      }
-    }
-    
-    try { await safeWrite(); } catch (e) { console.warn('[DB] Write warning:', e.message); }
-    return db.data.pets[petId];
-  },
-
-  // Delete pet
-  deletePet: async (petId) => {
-    await dbReady;
-    if (!db || !db.data) { console.warn('[DB] Not initialized for deletePet'); return null; }
-    db.data.pets = db.data.pets || {};
-    db.data.threads = db.data.threads || {};
-    const pet = db.data.pets[petId];
-    if (pet && pet.thread_id) {
-      delete db.data.threads[pet.thread_id];
-    }
-    delete db.data.pets[petId];
-    try { await safeWrite(); } catch (e) { console.warn('[DB] Write warning:', e.message); }
-    return pet;
-  },
-
-  // Get pet by thread ID
-  getPetByThread: (threadId) => {
-    if (!dbInitialized || !db || !db.data) return null;
-    db.data.threads = db.data.threads || {};
-    const petId = db.data.threads[threadId];
-    if (!petId) return null;
-    return module.exports.getPet(petId);
-  },
-
-  // Store pet management message info
-  setPetManagementMessage: async (channelId, messageId) => {
-    await dbReady;
-    if (!db || !db.data) { console.warn('[DB] Not initialized for setPetManagementMessage'); return null; }
-    db.data.petManagementMsg = { channelId, messageId };
-    try { await safeWrite(); } catch (e) { console.warn('[DB] Write warning:', e.message); }
-    return db.data.petManagementMsg;
-  },
-
-  // Get pet management message info
-  getPetManagementMessage: () => {
-    if (!dbInitialized || !db || !db.data) return null;
-    return db.data.petManagementMsg || null;
   }
 };

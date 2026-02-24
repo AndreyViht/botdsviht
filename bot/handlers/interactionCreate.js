@@ -1,7 +1,6 @@
 const { InteractionType } = require('discord.js');
 const { safeReply, safeUpdate, safeShowModal } = require('../libs/interactionUtils');
 const { handleMenuButton } = require('../menus/menuHandler');
-const { handlePetSpeciesButton, handlePetBreedButton, handlePetButton, handleMyPetsList } = require('../menus/petsHandler');
 const { handleReviewButton, handleReviewModal } = require('../commands/reviewsHandler');
 const { handleMusicButton } = require('../commands/musicHandler');
 
@@ -84,30 +83,6 @@ async function handleButton(interaction) {
     try { await handleMusicButton(interaction); } catch (err) { console.error('Music button error', err); await safeReply(interaction, { content: 'Ошибка музыки.', ephemeral: true }); }
     return;
   }
-
-  // Pet species buttons
-  if (customId && customId.startsWith('pet_species_button_')) {
-    try { await handlePetSpeciesButton(interaction); } catch (err) { console.error('Pet species button error', err.message); }
-    return;
-  }
-
-  // Pet breed buttons
-  if (customId && customId.startsWith('pet_breed_button_')) {
-    try { await handlePetBreedButton(interaction); } catch (err) { console.error('Pet breed button error', err.message); }
-    return;
-  }
-
-  // Pet action buttons
-  if (customId && customId.startsWith('pet_')) {
-    try { await handlePetButton(interaction); } catch (err) { console.error('Pet button error', err.message); }
-    return;
-  }
-
-  // My pets list button
-  if (customId === 'my_pets_list') {
-    try { await handleMyPetsList(interaction); } catch (err) { console.error('My pets list error', err.message); }
-    return;
-  }
 }
 
 async function handleModalSubmit(interaction) {
@@ -130,15 +105,6 @@ async function handleModalSubmit(interaction) {
   // Review modal
   if (customId === 'review_modal') {
     try { await handleReviewModal(interaction); } catch (err) { console.error('Review modal error', err); await safeReply(interaction, { content: 'Ошибка при отправке отзыва.', ephemeral: true }); }
-    return;
-  }
-
-  // Pet name modal
-  if (customId && customId.startsWith('pet_name_modal_')) {
-    try {
-      const { handlePetNameModal } = require('../menus/petsHandler');
-      await handlePetNameModal(interaction);
-    } catch (err) { console.error('Pet name modal error', err); await safeReply(interaction, { content: 'Ошибка при создании питомца.', ephemeral: true }); }
     return;
   }
 }

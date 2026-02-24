@@ -99,12 +99,6 @@ async function handleAiStartChat(interaction) {
 // Call OpenRouter API
 async function callOpenRouterAPI(messages) {
   try {
-    // Check if API key is configured
-    if (!config.aiApiKey || config.aiApiKey.includes('sk-or-v1-')) === false) {
-      console.error('[AI] Invalid API key format');
-      return null;
-    }
-
     const response = await fetch(`${config.aiBaseUrl}/chat/completions`, {
       method: 'POST',
       headers: {

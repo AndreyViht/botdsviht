@@ -103,7 +103,9 @@ async function callOpenRouterAPI(messages) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.aiApiKey}`
+        'Authorization': `Bearer ${config.aiApiKey}`,
+        'HTTP-Referer': 'https://discord.com',
+        'X-Title': 'Viht AI Bot'
       },
       body: JSON.stringify({
         model: config.aiModel,
@@ -114,16 +116,16 @@ async function callOpenRouterAPI(messages) {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      console.error('[AI] OpenRouter error:', error);
-      return null;
+      const errorText = await response.text();
+      console.error(`[AI] OpenRouter error ${response.status}:`, errorText);
+      return { error: `HTTP ${response.status}: ${errorText.slice(0, 200)}` };
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || null;
+    return { content: data.choices?.[0]?.message?.content || null };
   } catch (e) {
     console.error('[AI] API call error:', e.message);
-    return null;
+    return { error: e.message };
   }
 }
 
@@ -152,19 +154,21 @@ async function handleAiMessage(message) {
     });
 
     // Call API
-    const reply = await callOpenRouterAPI(history);
+    const result = await callOpenRouterAPI(history);
 
-    if (!reply) {
+    if (!result || result.error || !result.content) {
+      const errMsg = result?.error || 'Нет ответа от API';
       try {
         await message.reply({
-          content: '❌ Ошибка при получении ответа от AI. Проверьте, что API ключ установлен правильно.',
-          ephemeral: true
+          content: `❌ Ошибка AI: \`${errMsg}\``
         });
       } catch (er) {
         console.warn('[AI] Failed to send error message:', er.message);
       }
       return;
     }
+
+    const reply = result.content;
 
     // Add AI response to history
     history.push({

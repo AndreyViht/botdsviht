@@ -99,6 +99,12 @@ async function handleAiStartChat(interaction) {
 // Call OpenRouter API
 async function callOpenRouterAPI(messages) {
   try {
+    // Check if API key is configured
+    if (!config.aiApiKey || config.aiApiKey.includes('sk-or-v1-')) === false) {
+      console.error('[AI] Invalid API key format');
+      return null;
+    }
+
     const response = await fetch(`${config.aiBaseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -115,14 +121,14 @@ async function callOpenRouterAPI(messages) {
 
     if (!response.ok) {
       const error = await response.json();
-      console.error('OpenRouter error:', error);
+      console.error('[AI] OpenRouter error:', error);
       return null;
     }
 
     const data = await response.json();
     return data.choices?.[0]?.message?.content || null;
   } catch (e) {
-    console.error('callOpenRouterAPI error:', e.message);
+    console.error('[AI] API call error:', e.message);
     return null;
   }
 }
@@ -155,10 +161,14 @@ async function handleAiMessage(message) {
     const reply = await callOpenRouterAPI(history);
 
     if (!reply) {
-      await message.reply({
-        content: '❌ Ошибка при получении ответа от AI. Попробуйте ещё раз.',
-        ephemeral: true
-      });
+      try {
+        await message.reply({
+          content: '❌ Ошибка при получении ответа от AI. Проверьте, что API ключ установлен правильно.',
+          ephemeral: true
+        });
+      } catch (er) {
+        console.warn('[AI] Failed to send error message:', er.message);
+      }
       return;
     }
 
@@ -189,7 +199,7 @@ async function handleAiMessage(message) {
 
     console.log(`[AI] Responded to ${message.author.tag} in thread ${message.channelId}`);
   } catch (e) {
-    console.error('handleAiMessage error:', e.message);
+    console.error('[AI] handleAiMessage error:', e.message);
   }
 }
 

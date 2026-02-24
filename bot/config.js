@@ -28,7 +28,7 @@ const config = {
   // Viht AI Chat
   aiChannelId: '1475840432926756914',
   aiApiKey: process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || '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',
-  aiModel: process.env.OPENROUTER_MODEL || 'qwen/qwen3-vl-30b-a3b-thinking:free',
+  aiModel: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free',
   aiBaseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
 
 };

@@ -70,6 +70,16 @@ if (fs.existsSync(handlersPath)) {
   }
 }
 
+// Message handler for AI responses
+client.on('messageCreate', async (message) => {
+  try {
+    const { handleAiMessage } = require('./commands/aiHandler');
+    await handleAiMessage(message);
+  } catch (e) {
+    console.error('Message handler error:', e && e.message ? e.message : e);
+  }
+});
+
 // Bot start time
 const botStartTime = Date.now();
 
@@ -123,6 +133,12 @@ client.once('ready', async () => {
     const { ensureRulesPanel } = require('./commands/rulesHandler');
     await ensureRulesPanel(client);
   } catch (e) { console.warn('Failed to ensure rules panel on ready:', e && e.message ? e.message : e); }
+
+  // Ensure AI welcome message
+  try {
+    const { ensureAiWelcomeMessage } = require('./commands/aiHandler');
+    await ensureAiWelcomeMessage(client);
+  } catch (e) { console.warn('Failed to ensure AI welcome message:', e && e.message ? e.message : e); }
 
   // Ensure cleanup of old music channel
   try {

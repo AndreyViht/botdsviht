@@ -3,6 +3,7 @@ const { safeReply, safeUpdate, safeShowModal } = require('../libs/interactionUti
 const { handleMenuButton } = require('../menus/menuHandler');
 const { handleReviewButton, handleReviewModal } = require('../commands/reviewsHandler');
 const { handleMusicButton } = require('../commands/musicHandler');
+const { handleAiStartChat } = require('../commands/aiHandler');
 
 module.exports = {
   name: 'interactionCreate',
@@ -81,6 +82,12 @@ async function handleButton(interaction) {
   // Music buttons
   if (customId && customId.startsWith('music_')) {
     try { await handleMusicButton(interaction); } catch (err) { console.error('Music button error', err); await safeReply(interaction, { content: 'Ошибка музыки.', ephemeral: true }); }
+    return;
+  }
+
+  // AI Chat button
+  if (customId === 'ai_start_chat') {
+    try { await handleAiStartChat(interaction); } catch (err) { console.error('AI start chat error', err); await safeReply(interaction, { content: 'Ошибка при создании чата.', ephemeral: true }); }
     return;
   }
 }
